@@ -14,8 +14,8 @@
 
 pub const io = @import("./io.zig");
 pub const file = @import("./file.zig");
-pub const render = @import("./render.zig");
 pub const diagnostic = @import("./diagnostic.zig");
+pub const render = @import("./render/mod.zig");
 
 test "stderr color functionality" {
     const std = @import("std");
