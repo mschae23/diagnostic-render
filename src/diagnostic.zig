@@ -31,17 +31,17 @@ pub const Severity = enum(u3) {
         _ = options;
 
         switch (value) {
-            .help => writer.print("help", .{}),
-            .note => writer.print("note", .{}),
-            .warning => writer.print("warning", .{}),
-            .@"error" => writer.print("error", .{}),
-            .bug => writer.print("bug", .{}),
+            .help => return writer.print("help", .{}),
+            .note => return writer.print("note", .{}),
+            .warning => return writer.print("warning", .{}),
+            .@"error" => return writer.print("error", .{}),
+            .bug => return writer.print("bug", .{}),
         }
     }
 };
 
 /// A style for annotations.
-pub const AnnotationStyle = enum {
+pub const AnnotationStyle = enum(u1) {
     /// Annotations that describe the primary cause of a diagnostic.
     primary,
     /// Annotations that provide additional context for a diagnostic.
@@ -184,9 +184,11 @@ pub fn Diagnostic(comptime FileId: type) type {
         /// something like panic mode in error reporting.
         suppressed_count: u32,
 
+        const Self = @This();
+
         /// Create a new diagnostic.
-        pub fn init(severity: Severity) Diagnostic {
-            return Diagnostic {
+        pub fn init(severity: Severity) Self {
+            return Self {
                 .severity = severity,
                 .name = null,
                 .message = "",
@@ -199,78 +201,84 @@ pub fn Diagnostic(comptime FileId: type) type {
         /// Create a new diagnostic with a severity of [`Severity.bug`].
         ///
         /// [`Severity.bug`]: Severity.bug
-        pub fn bug() Diagnostic {
+        pub fn bug() Self {
             return init(.bug);
         }
 
         /// Create a new diagnostic with a severity of [`Severity.error`].
         ///
         /// [`Severity.error`]: Severity.error
-        pub fn err() Diagnostic {
+        pub fn err() Self {
             return init(.@"error");
         }
 
         /// Create a new diagnostic with a severity of [`Severity.warning`].
         ///
         /// [`Severity.warning`]: Severity.warning
-        pub fn warning() Diagnostic {
+        pub fn warning() Self {
             return init(.warning);
         }
 
         /// Create a new diagnostic with a severity of [`Severity.note`].
         ///
         /// [`Severity.note`]: Severity.note
-        pub fn note() Diagnostic {
+        pub fn note() Self {
             return init(.note);
         }
 
         /// Create a new diagnostic with a severity of [`Severity.help`].
         ///
         /// [`Severity.help`]: Severity.help
-        pub fn help() Diagnostic {
+        pub fn help() Self {
             return init(.help);
         }
 
         /// Set the name or code of the diagnostic.
-        pub fn with_name(self: Diagnostic, name: []const u8) Diagnostic {
-            self.name = name;
-            return self;
+        pub fn with_name(self: Self, name: []const u8) Self {
+            var self2 = self;
+            self2.name = name;
+            return self2;
         }
 
         /// Set the message of the diagnostic.
-        pub fn with_message(self: Diagnostic, message: []const u8) Diagnostic {
-            self.message = message;
-            return self;
+        pub fn with_message(self: Self, message: []const u8) Self {
+            var self2 = self;
+            self2.message = message;
+            return self2;
         }
 
         // /// Add an annotation to the diagnostic.
-        // pub fn with_annotation(self: Diagnostic, annotation: Annotation(FileId)) Diagnostic {
+        // pub fn with_annotation(self: Self, annotation: Annotation(FileId)) Self {
         //     self.annotations.addOne(annotation);
         //     return self;
         // }
 
         /// Set the annotations of the diagnostic.
-        pub fn with_annotations(self: Diagnostic, annotations: []const Annotation(FileId)) Diagnostic {
-            self.annotations = annotations;
-            return self;
+        pub fn with_annotations(self: Self, annotations: []const Annotation(FileId)) Self {
+            var self2 = self;
+            self2.annotations = annotations;
+            return self2;
         }
 
         // /// Add a note to the diagnostic.
-        // pub fn with_note(self: Diagnostic, note: Note) Diagnostic {
-        //     self.notes.push(note);
-        //     return self;
+        // pub fn with_note(self: Self, note: Note) Self {
+        //     var self2 = self;
+        //     self2.notes.push(note);
+        //     return self2;
         // }
 
         /// Set the notes of the diagnostic.
-        pub fn with_notes(self: Diagnostic, notes: []const Note) Diagnostic {
-            self.notes = notes;
-            return self;
+        pub fn with_notes(self: Self, notes: []const Note) Self {
+            var self2 = self;
+            self2.notes = notes;
+            return self2;
         }
 
         /// Sets the number of suppressed diagnostics.
-        pub fn with_suppressed_count(self: Diagnostic, suppressed_count: u32) Diagnostic {
-            self.suppressed_count = suppressed_count;
-            return self;
+        pub fn with_suppressed_count(self: Self, suppressed_count: u32) Self {
+            var self2 = self;
+            self2.suppressed_count = suppressed_count;
+            return self2;
         }
     };
 }

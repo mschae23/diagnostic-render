@@ -17,20 +17,7 @@ pub const file = @import("./file.zig");
 pub const diagnostic = @import("./diagnostic.zig");
 pub const render = @import("./render/mod.zig");
 
-test "stderr color functionality" {
-    const std = @import("std");
-
-    const stderr = std.io.getStdErr();
-    const tty = std.io.tty.detectConfig(stderr);
-    const stderr_writer = stderr.writer();
-
-    try stderr_writer.print("Hello!\n", .{});
-    try tty.setColor(stderr, .green);
-    try stderr_writer.print("Haha", .{});
-    try tty.setColor(stderr, .reset);
-    try stderr_writer.print("\n", .{});
-}
-
 test {
     @import("std").testing.refAllDeclsRecursive(@This());
+    @import("std").testing.refAllDeclsRecursive(@import("./tests/tests.zig"));
 }

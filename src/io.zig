@@ -26,3 +26,35 @@ pub const AnySeekableStream = struct {
         return self.getEndPosFn(self.context);
     }
 };
+
+pub fn anySeekableStream(comptime T: type, comptime Context: type, stream: *const Context) AnySeekableStream {
+    const TypeErased = struct {
+        pub fn typeErasedSeekToFn(context: *const anyopaque, pos: u64) anyerror!void {
+            const ptr: *const Context = @alignCast(@ptrCast(context));
+            return T.seekTo(ptr.*, pos);
+        }
+
+        pub fn typeErasedSeekByFn(context: *const anyopaque, amt: i64) anyerror!void {
+            const ptr: *const Context = @alignCast(@ptrCast(context));
+            return T.seekBy(ptr.*, amt);
+        }
+
+        pub fn typeErasedGetPosFn(context: *const anyopaque) anyerror!u64 {
+            const ptr: *const Context = @alignCast(@ptrCast(context));
+            return T.getPos(ptr.*);
+        }
+
+        pub fn typeErasedGetEndPosFn(context: *const anyopaque) anyerror!u64 {
+            const ptr: *const Context = @alignCast(@ptrCast(context));
+            return T.getEndPos(ptr.*);
+        }
+    };
+
+    return .{
+        .context = @ptrCast(stream),
+        .seekToFn = TypeErased.typeErasedSeekToFn,
+        .seekByFn = TypeErased.typeErasedSeekByFn,
+        .getPosFn = TypeErased.typeErasedGetPosFn,
+        .getEndPosFn = TypeErased.typeErasedGetEndPosFn,
+    };
+}

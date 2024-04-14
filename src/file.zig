@@ -36,14 +36,14 @@ pub fn Files(comptime FileId: type) type {
         const Self = @This();
 
         /// Caller retains overship over HashMap memory.
-        pub fn init(allocator: std.mem.Allocator, files: *std.AutoHashMap(FileId, FileData)) Self {
+        pub fn init(allocator: std.mem.Allocator, files: *std.AutoHashMap(FileId, FileData)) !Self {
             return Self {
                 .files = files,
 
                 .allocator = allocator,
-                .line_starts = std.AutoArrayHashMap(FileId, std.ArrayListUnmanaged(usize)).init(allocator),
-                .grapheme_data = grapheme.GraphemeData.init(allocator),
-                .displaywidth_data = DisplayWidth.DisplayWidthData.init(allocator),
+                .line_starts = std.AutoHashMap(FileId, std.ArrayListUnmanaged(usize)).init(allocator),
+                .grapheme_data = try grapheme.GraphemeData.init(allocator),
+                .displaywidth_data = try DisplayWidth.DisplayWidthData.init(allocator),
             };
         }
 
@@ -138,7 +138,7 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
-        pub fn columnIndex(self: *const Self, file_id: FileId, line_index: usize, byte_index: usize, tab_size: usize) anyerror!?usize {
+        pub fn columnIndex(self: *const Self, file_id: FileId, line_index: usize, byte_index: usize, tab_length: usize) anyerror!?usize {
             const opt_line_range = try self.lineRange(file_id, line_index);
 
             if (opt_line_range) |line_range| {
@@ -214,7 +214,7 @@ pub fn Files(comptime FileId: type) type {
 
                         if (grapheme_break) {
                             if (cp_0 == '\t') {
-                                count += tab_size;
+                                count += tab_length;
                             } else {
                                 count += dw.strWidth(gc_string.items);
                             }
@@ -224,7 +224,7 @@ pub fn Files(comptime FileId: type) type {
                     }
 
                     if (cp_1.? == '\t') {
-                        count += tab_size;
+                        count += tab_length;
                     } else {
                         std.unicode.utf8Encode(cp_1.?, gc_string.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(cp_1) catch unreachable)) catch unreachable;
                         count += dw.strWidth(gc_string.items);
@@ -244,13 +244,13 @@ pub fn Files(comptime FileId: type) type {
             return column_index + 1;
         }
 
-        pub fn location(self: *const Self, file_id: FileId, byte_index: usize, tab_size: usize) anyerror!?Location {
+        pub fn location(self: *const Self, file_id: FileId, byte_index: usize, tab_length: usize) anyerror!?Location {
             const opt_line_index = try self.lineIndex(file_id, byte_index);
 
             if (opt_line_index) |line_index| {
                 return Location {
                     .line_number = self.lineNumber(file_id, line_index),
-                    .column_number = self.columnNumber(file_id, try self.columnIndex(file_id, line_index, byte_index, tab_size)),
+                    .column_number = self.columnNumber(file_id, try self.columnIndex(file_id, line_index, byte_index, tab_length)),
                 };
             } else {
                 return null;
