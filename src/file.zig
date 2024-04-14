@@ -17,6 +17,28 @@ pub const LineRange = struct {
     end: usize,
 };
 
+/// Represents a location in a specific source file,
+/// using line and column indices.
+///
+/// Note that these are indices and not user-facing numbers,
+/// so they are `0`-indexed.
+///
+/// It is not necessarily checked that this position exists
+/// in the source file.
+pub const LineColumn = struct {
+    /// The `0`-indexed line index.
+    line_index: usize,
+    /// The `0`-indexed column index.
+    column_index: usize,
+
+    pub fn init(line_index: usize, column_index: usize) LineColumn {
+        return LineColumn {
+            .line_index = line_index,
+            .column_index = column_index,
+        };
+    }
+};
+
 pub const Location = struct {
     /// The user-facing line number.
     line_number: usize,
@@ -252,6 +274,19 @@ pub fn Files(comptime FileId: type) type {
             _ = self;
             _ = file_id;
             return column_index + 1;
+        }
+
+        pub fn lineColumn(self: *Self, file_id: FileId, byte_index: usize, tab_length: usize) anyerror!?LineColumn {
+            const opt_line_index = try self.lineIndex(file_id, byte_index);
+
+            if (opt_line_index) |line_index| {
+                return LineColumn {
+                    .line_index = line_index,
+                    .column_index = try self.columnIndex(file_id, line_index, byte_index, tab_length),
+                };
+            } else {
+                return null;
+            }
         }
 
         pub fn location(self: *Self, file_id: FileId, byte_index: usize, tab_length: usize) anyerror!?Location {

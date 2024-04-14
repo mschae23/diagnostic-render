@@ -1,32 +1,12 @@
 const std = @import("std");
 const io = @import("../io.zig");
 const file = @import("../file.zig");
+const LineColumn = file.LineColumn;
 const diag = @import("../diagnostic.zig");
 const Diagnostic = diag.Diagnostic;
 const Annotation = diag.Annotation;
 const ColorConfig = @import("../ColorConfig.zig");
-
-/// Represents a location in a specific source file,
-/// using line and column indices.
-///
-/// Note that these are indices and not user-facing numbers,
-/// so they are `0`-indexed.
-///
-/// It is not necessarily checked that this position exists
-/// in the source file.
-pub const LineColumn = struct {
-    /// The `0`-indexed line index.
-    line_index: usize,
-    /// The `0`-indexed column index.
-    column_index: usize,
-
-    pub fn init(line_index: usize, column_index: usize) LineColumn {
-        return LineColumn {
-            .line_index = line_index,
-            .column_index = column_index,
-        };
-    }
-};
+const calculate = @import("./calculate/mod.zig");
 
 /// Contains some configuration parameters for [`DiagnosticRenderer`].
 ///
@@ -272,10 +252,8 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
                 var continuing_annotations = try std.ArrayListUnmanaged(*const Annotation(FileId)).initCapacity(allocator, 0);
                 defer continuing_annotations.deinit(allocator);
-                var singleline_annotations = try std.ArrayListUnmanaged(*const Annotation(FileId)).initCapacity(allocator, 0);
-                defer singleline_annotations.deinit(allocator);
-                var starting_annotations = try std.ArrayListUnmanaged(*const Annotation(FileId)).initCapacity(allocator, 0);
-                defer starting_annotations.deinit(allocator);
+                var active_annotations = try std.ArrayListUnmanaged(*const Annotation(FileId)).initCapacity(allocator, 0);
+                defer active_annotations.deinit(allocator);
 
                 var i: usize = 0;
 
@@ -289,21 +267,19 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     } else if (start_line_index < current_line_index and end_line_index > current_line_index) {
                         (try continuing_annotations.addOne(allocator)).* = annotation;
                         continue;
-                    } else if (start_line_index != current_line_index or end_line_index != current_line_index) {
+                    } else if (start_line_index != current_line_index and end_line_index != current_line_index) {
                         continue;
                     }
 
                     if (start_line_index < current_line_index) {
                         (try continuing_annotations.addOne(allocator)).* = annotation;
-                    } else if (end_line_index == current_line_index) {
-                        (try singleline_annotations.addOne(allocator)).* = annotation;
-                    } else {
-                        (try starting_annotations.addOne(allocator)).* = annotation;
                     }
+
+                    (try active_annotations.addOne(allocator)).* = annotation;
                 }
 
                 try self.renderPartLines(allocator, diagnostic, file_id, current_line_index, last_line_index,
-                    continuing_annotations, singleline_annotations, starting_annotations, &already_printed_end_line_index);
+                    continuing_annotations, active_annotations, &already_printed_end_line_index);
 
                     last_line_index = current_line_index;
             }
@@ -337,7 +313,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             }
         }
 
-        fn renderPartLines(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, current_line_index: usize, last_line_index: ?usize, continuing_annotations: std.ArrayListUnmanaged(*const Annotation(FileId)), singleline_annotations: std.ArrayListUnmanaged(*const Annotation(FileId)), starting_annotations: std.ArrayListUnmanaged(*const Annotation(FileId)), already_printed_end_line_index: *usize) anyerror!void {
+        fn renderPartLines(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, current_line_index: usize, last_line_index: ?usize, continuing_annotations: std.ArrayListUnmanaged(*const Annotation(FileId)), active_annotations: std.ArrayListUnmanaged(*const Annotation(FileId)), already_printed_end_line_index: *usize) anyerror!void {
             if (last_line_index) |last_line| {
                 try self.renderPostSurroundingLines(allocator, diagnostic, file_id, current_line_index, last_line, continuing_annotations.items, already_printed_end_line_index);
             }
@@ -354,7 +330,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             var line: usize = first_print_line_index;
 
             while (line <= last_print_line_index) : (line += 1) {
-                try self.renderLine(allocator, diagnostic, file_id, line, current_line_index, &continuing_annotations, &singleline_annotations, &starting_annotations);
+                try self.renderLine(allocator, diagnostic, file_id, line, current_line_index, &continuing_annotations, &active_annotations);
                 already_printed_end_line_index.* += 1;
             }
         }
@@ -403,17 +379,24 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             }
         }
 
-        fn renderLine(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, main_line_index: usize, continuing_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId)), singleline_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId)), starting_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {
-            _ = singleline_annotations;
-            _ = starting_annotations;
-
+        fn renderLine(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, main_line_index: usize, continuing_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId)), active_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {
             try self.writeSourceLine(allocator, diagnostic, file_id, line_index, .pipe, continuing_annotations.items);
 
             if (line_index != main_line_index) {
                 return;
             }
 
-            // return self.renderLineAnnotations(...);
+            return self.renderLineAnnotations(allocator, diagnostic, file_id, line_index, continuing_annotations, active_annotations);
+        }
+
+        fn renderLineAnnotations(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, continuing_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId)), active_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {
+            _ = self;
+            _ = allocator;
+            _ = diagnostic;
+            _ = file_id;
+            _ = line_index;
+            _ = continuing_annotations;
+            _ = active_annotations;
         }
 
         const LineNumberSeparator = enum {
