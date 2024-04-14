@@ -115,6 +115,16 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
+        pub fn getLastLineIndex(self: *Self, file_id: FileId) anyerror!?usize {
+            const opt_line_starts = try self.getOrComputeLineStarts(file_id);
+
+            if (opt_line_starts) |line_starts| {
+                return line_starts.items.len - 2;
+            } else {
+                return null;
+            }
+        }
+
         pub fn lineNumber(self: *Self, file_id: FileId, line_index: usize) usize {
             _ = self;
             _ = file_id;
