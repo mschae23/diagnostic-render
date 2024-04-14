@@ -282,7 +282,7 @@ pub fn Files(comptime FileId: type) type {
             if (opt_line_index) |line_index| {
                 return LineColumn {
                     .line_index = line_index,
-                    .column_index = try self.columnIndex(file_id, line_index, byte_index, tab_length),
+                    .column_index = try self.columnIndex(file_id, line_index, byte_index, tab_length) orelse unreachable,
                 };
             } else {
                 return null;

@@ -390,13 +390,15 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
         }
 
         fn renderLineAnnotations(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, continuing_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId)), active_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {
-            _ = self;
-            _ = allocator;
-            _ = diagnostic;
-            _ = file_id;
-            _ = line_index;
-            _ = continuing_annotations;
-            _ = active_annotations;
+            var annotation_data = try calculate.calculate(FileId, allocator, diagnostic, &self.files, file_id, line_index, self.config.tab_length, continuing_annotations, active_annotations);
+
+            defer {
+                for (annotation_data.items) |*item| {
+                    item.deinit(allocator);
+                }
+
+                annotation_data.deinit(allocator);
+            }
         }
 
         const LineNumberSeparator = enum {
