@@ -372,6 +372,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     defer allocator.free(buf);
                     try reader.readNoEof(buf);
 
+                    // TODO Make sure that invalid UTF-8 sequences are handled the exact same way as Files.columnIndex
                     try self.colors.setColor(self.writer, self.config.colors.source);
                     try self.writer.writeAll(buf);
                     try self.colors.setColor(self.writer, self.config.colors.reset);
@@ -398,6 +399,16 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 }
 
                 annotation_data.deinit(allocator);
+            }
+
+            for (annotation_data.items) |item| {
+                try self.writer.writeAll("[debug] ");
+
+                for (item.items) |item2| {
+                    try self.writer.print("{any}, ", .{item2});
+                }
+
+                try self.writer.writeByte('\n');
             }
         }
 

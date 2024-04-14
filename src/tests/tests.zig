@@ -24,7 +24,7 @@ test "Development" {
 
     const diagnostics = .{
         diag.Diagnostic(usize).err().with_name("thing/test").with_message("Test").with_annotations(&.{
-            diag.Annotation(usize).primary(0, diag.Span.init(13, 22)).with_label("Annotation")
+            diag.Annotation(usize).primary(0, diag.Span.init(7, 44 + 35)).with_label("Annotation")
         })
     };
 

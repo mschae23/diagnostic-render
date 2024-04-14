@@ -1,6 +1,7 @@
 const std = @import("std");
 const io = @import("../../io.zig");
 const file = @import("../../file.zig");
+const LineColumn = file.LineColumn;
 const diag = @import("../../diagnostic.zig");
 const Diagnostic = diag.Diagnostic;
 const Annotation = diag.Annotation;
@@ -412,15 +413,267 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
     file_id: FileId, line_index: usize, tab_length: usize,
     starts_ends: *std.ArrayListUnmanaged(StartEnd(FileId)), vertical_offsets: *std.ArrayListUnmanaged(VerticalOffset),
     continuing_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!std.ArrayListUnmanaged(std.ArrayListUnmanaged(AnnotationData)) {
-    _ = diagnostic;
-    _ = files;
-    _ = file_id;
-    _ = line_index;
     _ = tab_length;
-    _ = starts_ends;
-    _ = vertical_offsets;
-    _ = continuing_annotations;
 
-    const final_data = try std.ArrayListUnmanaged(std.ArrayListUnmanaged(AnnotationData)).initCapacity(allocator, 1);
+    var final_data = try std.ArrayListUnmanaged(std.ArrayListUnmanaged(AnnotationData)).initCapacity(allocator, 1);
+
+    errdefer {
+        for (final_data.items) |*item| {
+            item.deinit(allocator);
+        }
+
+        final_data.deinit(allocator);
+    }
+
+    // How many elements from the start of continuing_annotations to take.
+    // Exclusive, the index referred to is not included.
+    var continuing_end_index: usize = 0;
+
+    {
+        var i: usize = 0;
+
+        while (i < continuing_annotations.items.len) : (i += 1) {
+            const start_line_index = try files.lineIndex(file_id, continuing_annotations.items[i].range.start) orelse unreachable;
+
+            // Once we reach a continuing annotation that started on this line,
+            // all the ones after it in the vector should start later too, so we can stop here.
+            // Keep updating i as the last index to use for the continuing vertical bars on the first line
+            // as long as annotations are still from before this line.
+            if (start_line_index < line_index) {
+                continuing_end_index = i + 1;
+            } else if (start_line_index >= line_index) {
+                break;
+            }
+        }
+    }
+
+    var current_vertical_offset: usize = 0;
+    var continue_next_line: bool = false;
+    // starts_ends is usually iterated on in reverse, so this value is used to see how many annotations can already be skipped
+    // because they were displayed on previous lines. This is an exclusive end index.
+    var annotation_end_index: usize = starts_ends.items.len;
+
+    var additional_continuing_annotations = try std.ArrayListUnmanaged(*const Annotation(FileId)).initCapacity(allocator, 0);
+    defer additional_continuing_annotations.deinit(allocator);
+
+    while (true) : (current_vertical_offset += 1) {
+        continue_next_line = false;
+
+        var line_data: std.ArrayListUnmanaged(AnnotationData) = try std.ArrayListUnmanaged(AnnotationData).initCapacity(allocator, 0);
+        errdefer line_data.deinit(allocator);
+
+        {
+            // Add continuing multiline data for annotations starting on previous lines
+            try line_data.ensureTotalCapacity(allocator, line_data.items.len + continuing_end_index + additional_continuing_annotations.items.len);
+            var i: usize = 0;
+
+            while (i < continuing_end_index) : (i += 1) {
+                const annotation = continuing_annotations.items[i];
+
+                line_data.addOneAssumeCapacity().* = AnnotationData { .continuing_multiline = ContinuingMultilineAnnotationData {
+                    .style = annotation.style,
+                    .severity = diagnostic.severity,
+                    .vertical_bar_index = i,
+                }};
+            }
+
+            // Add continuing multiline data for annotations starting on this line
+            i = 0;
+
+            while (i < additional_continuing_annotations.items.len) : (i += 1) {
+                const annotation = starts_ends.items[i].annotation;
+
+                line_data.addOneAssumeCapacity().* = AnnotationData { .continuing_multiline = ContinuingMultilineAnnotationData {
+                    .style = annotation.style,
+                    .severity = diagnostic.severity,
+                    .vertical_bar_index = continuing_end_index + i,
+                }};
+            }
+        }
+
+        var next_connection_offset_annotation_index: usize = 0;
+
+        {
+            // Add connecting multiline data
+            var i: usize = annotation_end_index;
+
+            while (i > 0) {
+                i -= 1;
+                const vertical_offset = vertical_offsets.items[i];
+
+                if (vertical_offset.connection < current_vertical_offset and vertical_offset.label < current_vertical_offset) {
+                    annotation_end_index = i;
+                    continue;
+                }
+
+                if (vertical_offset.connection > current_vertical_offset) {
+                    continue_next_line = true;
+                    next_connection_offset_annotation_index = i;
+                    break;
+                }
+
+                if (vertical_offset.connection == current_vertical_offset) {
+                    const start_end = starts_ends.items[i];
+
+                    const end_location = switch (start_end.data) {
+                        .start => |data| data.location,
+                        .end => |data| data.location,
+                        .both => continue,
+                    };
+
+                    (try line_data.addOne(allocator)).* = AnnotationData { .connecting_multiline = ConnectingMultilineAnnotationData {
+                        .style = start_end.annotation.style,
+                        .severity = diagnostic.severity,
+                        .end_location = end_location,
+                        .vertical_bar_index = continuing_end_index + additional_continuing_annotations.items.len,
+                    }};
+
+                    break;
+                }
+            }
+        }
+
+        if (current_vertical_offset == 0) {
+            // Add start and end data
+            const line_data_new_start_index: usize = line_data.items.len;
+            var i: usize = 0;
+
+            const CompareAnnotationData = struct {
+                pub fn inner(_: void, a: LineColumn, b: AnnotationData) bool {
+                    const a_start = a;
+                    const b_start = switch (b) {
+                        .start => |data| data.location,
+                        .end => |data| data.location,
+                        .connecting_singleline => |data| LineColumn.init(data.line_index, data.start_column_index),
+                        else => unreachable,
+                    };
+
+                    if (a_start.line_index == b_start.line_index) {
+                        return a_start.column_index < b_start.column_index;
+                    } else {
+                        return a_start.line_index < b_start.line_index;
+                    }
+                }
+            };
+
+            while (i < starts_ends.items.len) : (i += 1) {
+                const start_end = starts_ends.items[i];
+
+                switch (start_end.data) {
+                    .start => |data| (try line_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.location, line_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                        AnnotationData { .start = StartAnnotationData {
+                            .style = start_end.annotation.style,
+                            .severity = diagnostic.severity,
+                            .location = data.location,
+                        }})),
+                    .end => |data| (try line_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.location, line_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                        AnnotationData { .end = EndAnnotationData {
+                            .style = start_end.annotation.style,
+                            .severity = diagnostic.severity,
+                            .location = data.location,
+                        }})),
+                    .both => |data| {
+                        (try line_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.start.location, line_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                            AnnotationData { .start = StartAnnotationData {
+                                .style = start_end.annotation.style,
+                                .severity = diagnostic.severity,
+                                .location = data.start.location,
+                            }}));
+                        (try line_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.start.location, line_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                            AnnotationData { .connecting_singleline = ConnectingSinglelineAnnotationData {
+                                .style = start_end.annotation.style, .as_multiline = false,
+                                .severity = diagnostic.severity,
+                                .line_index = data.start.location.line_index,
+                                .start_column_index = data.start.location.column_index, .end_column_index = data.end.location.column_index,
+                            }}));
+                        (try line_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.end.location, line_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                            AnnotationData { .end = EndAnnotationData {
+                                .style = start_end.annotation.style,
+                                .severity = diagnostic.severity,
+                                .location = data.end.location,
+                            }}));
+                    },
+                }
+            }
+        } else {
+            // Add hanging data
+            var i: usize = 0;
+
+            while (i < starts_ends.items.len) : (i += 1) {
+                const start_end = starts_ends.items[i];
+                const vertical_offset = vertical_offsets.items[i];
+
+                if (vertical_offset.label <= current_vertical_offset) {
+                    continue;
+                }
+
+                switch (start_end.data) {
+                    .start => |data| (try line_data.addOne(allocator)).* =
+                        AnnotationData { .hanging = HangingAnnotationData {
+                            .style = start_end.annotation.style,
+                            .severity = diagnostic.severity,
+                            .location = data.location,
+                        }},
+                    .end => |data| (try line_data.addOne(allocator)).* =
+                        AnnotationData { .hanging = HangingAnnotationData {
+                            .style = start_end.annotation.style,
+                            .severity = diagnostic.severity,
+                            .location = data.location,
+                        }},
+                    .both => |data| (try line_data.addOne(allocator)).* =
+                        AnnotationData { .hanging = HangingAnnotationData {
+                            .style = start_end.annotation.style,
+                            .severity = diagnostic.severity,
+                            .location = data.start.location,
+                        }},
+                }
+            }
+        }
+
+        {
+            // Add label data
+            var i: usize = 0;
+
+            while (i < starts_ends.items.len) : (i += 1) {
+                const start_end = starts_ends.items[i];
+                const vertical_offset = vertical_offsets.items[i];
+
+                if (vertical_offset.label < current_vertical_offset or start_end.annotation.label.len == 0) {
+                    continue;
+                } else if (vertical_offset.label > current_vertical_offset) {
+                    continue_next_line = true;
+                    continue;
+                }
+
+                switch (start_end.data) {
+                    .start => continue,
+                    .end => |data| (try line_data.addOne(allocator)).* =
+                        AnnotationData { .label = LabelAnnotationData {
+                            .style = start_end.annotation.style,
+                            .severity = diagnostic.severity,
+                            .location = data.location,
+                            .label = start_end.annotation.label,
+                        }},
+                    .both => |data| (try line_data.addOne(allocator)).* =
+                        AnnotationData { .label = LabelAnnotationData {
+                            .style = start_end.annotation.style,
+                            .severity = diagnostic.severity,
+                            .location = data.start.location,
+                            .label = start_end.annotation.label,
+                        }},
+                }
+
+                break;
+            }
+        }
+
+        // errdefer at the top of this block is allowed to trigger on this try, but not after it
+        (try final_data.addOne(allocator)).* = line_data;
+
+        if (!continue_next_line) {
+            break;
+        }
+    }
+
     return final_data;
 }
