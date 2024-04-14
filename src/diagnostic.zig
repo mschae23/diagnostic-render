@@ -100,8 +100,9 @@ pub fn Annotation(comptime FileId: type) type {
 
         /// Add a label to the annotation.
         pub fn with_label(self: Self, label: []const u8) Self {
-            self.label = label;
-            return self;
+            var self2 = self;
+            self2.label = label;
+            return self2;
         }
     };
 }

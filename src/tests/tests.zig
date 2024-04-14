@@ -7,7 +7,7 @@ const render = @import("../render/mod.zig");
 
 test "Development" {
     var fbs = std.io.fixedBufferStream(
-        \\pub fn test(&mut self, arg: i32) -> bool {
+        \\pub fn tést(&mut self, arg: i32) -> bool {
         \\    return self.counter + arg > 7;
         \\}
     );
@@ -23,14 +23,14 @@ test "Development" {
     const files = try file.Files(usize).init(std.testing.allocator, &file_hashmap);
 
     const diagnostics = .{
-        diag.Diagnostic(usize).err().with_name("thing/test").with_message("Test")
+        diag.Diagnostic(usize).err().with_name("thing/test").with_message("Test").with_annotations(&.{
+            diag.Annotation(usize).primary(0, diag.Span.init(13, 22)).with_label("Annotation")
+        })
     };
 
     const output = std.io.getStdErr();
     try output.writer().writeByte('\n');
 
-    var renderer = render.DiagnosticRenderer(usize).init(output.writer().any(), std.io.tty.detectConfig(output), files, .{});
-    defer renderer.files.deinit();
-
+    var renderer = render.DiagnosticRenderer(usize).init(std.testing.allocator, output.writer().any(), std.io.tty.detectConfig(output), files, .{});
     try renderer.render(&diagnostics);
 }

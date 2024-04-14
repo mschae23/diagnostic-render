@@ -90,7 +90,7 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
-        pub fn lineIndex(self: *const Self, file_id: FileId, byte_index: usize) anyerror!?usize {
+        pub fn lineIndex(self: *Self, file_id: FileId, byte_index: usize) anyerror!?usize {
             const opt_line_starts = try self.getOrComputeLineStarts(file_id);
 
             if (opt_line_starts) |line_starts| {
@@ -115,13 +115,13 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
-        pub fn lineNumber(self: *const Self, file_id: FileId, line_index: usize) usize {
+        pub fn lineNumber(self: *Self, file_id: FileId, line_index: usize) usize {
             _ = self;
             _ = file_id;
             return line_index + 1;
         }
 
-        pub fn lineRange(self: *const Self, file_id: FileId, line_index: usize) anyerror!?LineRange {
+        pub fn lineRange(self: *Self, file_id: FileId, line_index: usize) anyerror!?LineRange {
             const opt_line_starts = try self.getOrComputeLineStarts(file_id);
 
             if (opt_line_starts) |line_starts| {
@@ -138,7 +138,7 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
-        pub fn columnIndex(self: *const Self, file_id: FileId, line_index: usize, byte_index: usize, tab_length: usize) anyerror!?usize {
+        pub fn columnIndex(self: *Self, file_id: FileId, line_index: usize, byte_index: usize, tab_length: usize) anyerror!?usize {
             const opt_line_range = try self.lineRange(file_id, line_index);
 
             if (opt_line_range) |line_range| {
@@ -152,7 +152,7 @@ pub fn Files(comptime FileId: type) type {
                     try file_data.seeker.seekTo(line_range.start);
 
                     var remaining_bytes = byte_index - line_range.start;
-                    const count: usize = 0;
+                    var count: usize = 0;
 
                     const dw = DisplayWidth { .data = &self.displaywidth_data };
                     var gc_string = try std.ArrayListUnmanaged(u8).initCapacity(self.allocator, 1);
@@ -160,7 +160,7 @@ pub fn Files(comptime FileId: type) type {
                     var cp_0: ?u21 = null;
                     var cp_1: ?u21 = null;
                     var grapheme_state = grapheme.State {};
-                    var buf = .{0} ** 4;
+                    var buf: [4]u8 = .{0} ** 4;
 
                     while (remaining_bytes > 0) {
                         const codepoint = codepoint: {
@@ -181,7 +181,7 @@ pub fn Files(comptime FileId: type) type {
                                             },
                                             else => return err2,
                                         };
-                                        std.unicode.utf8ByteSequenceLength(byte2) catch |err3| switch (err3) {
+                                        _ = std.unicode.utf8ByteSequenceLength(byte2) catch |err3| switch (err3) {
                                             error.Utf8InvalidStartByte => continue,
                                         };
                                         break;
@@ -192,12 +192,12 @@ pub fn Files(comptime FileId: type) type {
                             };
 
                             buf[0] = byte;
-                            file_data.reader.readAll(&buf[1 .. codepoint_length]) catch |err| switch (err) {
+                            file_data.reader.readNoEof(buf[1 .. codepoint_length]) catch |err| switch (err) {
                                 error.EndOfStream => break,
                                 else => return err,
                             };
 
-                            break :codepoint std.unicode.utf8Decode(&buf[0..codepoint_length]) catch break :codepoint std.unicode.replacement_character;
+                            break :codepoint std.unicode.utf8Decode(buf[0..codepoint_length]) catch break :codepoint std.unicode.replacement_character;
                         };
 
                         cp_0 = cp_1;
@@ -207,10 +207,10 @@ pub fn Files(comptime FileId: type) type {
                             // First iteration
                             continue;
                         } else {
-                            std.unicode.utf8Encode(cp_0.?, gc_string.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(cp_0) catch unreachable)) catch unreachable;
+                            _ = std.unicode.utf8Encode(cp_0.?, try gc_string.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(cp_0.?) catch unreachable)) catch unreachable;
                         }
 
-                        const grapheme_break = grapheme.graphemeBreak(cp_0, cp_1, &self.grapheme_data, &grapheme_state);
+                        const grapheme_break = grapheme.graphemeBreak(cp_0.?, cp_1.?, &self.grapheme_data, &grapheme_state);
 
                         if (grapheme_break) {
                             if (cp_0 == '\t') {
@@ -226,7 +226,7 @@ pub fn Files(comptime FileId: type) type {
                     if (cp_1.? == '\t') {
                         count += tab_length;
                     } else {
-                        std.unicode.utf8Encode(cp_1.?, gc_string.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(cp_1) catch unreachable)) catch unreachable;
+                        _ = std.unicode.utf8Encode(cp_1.?, try gc_string.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(cp_1.?) catch unreachable)) catch unreachable;
                         count += dw.strWidth(gc_string.items);
                     }
                     return count;
@@ -238,19 +238,19 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
-        pub fn columnNumber(self: *const Self, file_id: FileId, column_index: usize) usize {
+        pub fn columnNumber(self: *Self, file_id: FileId, column_index: usize) usize {
             _ = self;
             _ = file_id;
             return column_index + 1;
         }
 
-        pub fn location(self: *const Self, file_id: FileId, byte_index: usize, tab_length: usize) anyerror!?Location {
+        pub fn location(self: *Self, file_id: FileId, byte_index: usize, tab_length: usize) anyerror!?Location {
             const opt_line_index = try self.lineIndex(file_id, byte_index);
 
             if (opt_line_index) |line_index| {
                 return Location {
                     .line_number = self.lineNumber(file_id, line_index),
-                    .column_number = self.columnNumber(file_id, try self.columnIndex(file_id, line_index, byte_index, tab_length)),
+                    .column_number = self.columnNumber(file_id, try self.columnIndex(file_id, line_index, byte_index, tab_length) orelse unreachable),
                 };
             } else {
                 return null;
@@ -258,7 +258,7 @@ pub fn Files(comptime FileId: type) type {
         }
 
         fn lineStarts(allocator: std.mem.Allocator, source: std.io.AnyReader) anyerror!std.ArrayListUnmanaged(usize) {
-            const line_starts = try std.ArrayListUnmanaged(usize).initCapacity(allocator, 2);
+            var line_starts = try std.ArrayListUnmanaged(usize).initCapacity(allocator, 2);
             line_starts.addOneAssumeCapacity().* = 0;
 
             var byte_index: usize = 0;
@@ -266,13 +266,13 @@ pub fn Files(comptime FileId: type) type {
             while (true) : (byte_index += 1) {
                 const byte = source.readByte() catch |err| switch (err) {
                     error.EndOfStream => {
-                        line_starts.addOne(allocator).* = byte_index;
+                        (try line_starts.addOne(allocator)).* = byte_index;
                         return line_starts;
                     },
                     else => |e| return e,
                 };
 
-                if (byte == '\n') line_starts.addOne(allocator).* = byte_index + 1;
+                if (byte == '\n') (try line_starts.addOne(allocator)).* = byte_index + 1;
             }
         }
 
@@ -288,9 +288,9 @@ pub fn Files(comptime FileId: type) type {
                 } else {
                     return null;
                 }
-            } else {
-                return entry.found_existing.*;
             }
+
+            return entry.value_ptr.*;
         }
     };
 }
