@@ -32,16 +32,16 @@ pub const VerticalOffset = struct {
 
 pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), files: *file.Files(FileId),
     file_id: FileId, line_index: usize, tab_length: usize,
-    continuing_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId)),
-    active_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!std.ArrayListUnmanaged(std.ArrayListUnmanaged(AnnotationData)) {
-    var starts_ends = try std.ArrayListUnmanaged(StartEnd(FileId)).initCapacity(allocator, active_annotations.items.len);
+    continuing_annotations: []const *const Annotation(FileId),
+    active_annotations: []const *const Annotation(FileId)) anyerror!std.ArrayListUnmanaged(AnnotationData) {
+    var starts_ends = try std.ArrayListUnmanaged(StartEnd(FileId)).initCapacity(allocator, active_annotations.len);
     defer starts_ends.deinit(allocator);
 
     {
         var i: usize = 0;
 
-        while (i < active_annotations.items.len) : (i += 1) {
-            const annotation = active_annotations.items[i];
+        while (i < active_annotations.len) : (i += 1) {
+            const annotation = active_annotations[i];
             const start = try files.lineColumn(file_id, annotation.range.start, .inclusive, tab_length) orelse unreachable;
             const end = try files.lineColumn(file_id, annotation.range.end, .exclusive, tab_length) orelse unreachable;
 
@@ -117,7 +117,7 @@ pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic
     var vertical_offsets = try calculateVerticalOffsets(FileId, allocator, starts_ends.items);
     defer vertical_offsets.deinit(allocator);
 
-    return try calculateFinalData(FileId, allocator, diagnostic, files, file_id, line_index, tab_length, &starts_ends, &vertical_offsets, continuing_annotations);
+    return try calculateFinalData(FileId, allocator, diagnostic, files, file_id, line_index, tab_length, starts_ends.items, vertical_offsets.items, continuing_annotations);
 }
 
 pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Allocator, starts_ends: []const StartEnd(FileId)) std.mem.Allocator.Error!std.ArrayListUnmanaged(VerticalOffset) {
@@ -379,19 +379,13 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
 
 pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), files: *file.Files(FileId),
     file_id: FileId, line_index: usize, tab_length: usize,
-    starts_ends: *std.ArrayListUnmanaged(StartEnd(FileId)), vertical_offsets: *std.ArrayListUnmanaged(VerticalOffset),
-    continuing_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!std.ArrayListUnmanaged(std.ArrayListUnmanaged(AnnotationData)) {
+    starts_ends: []const StartEnd(FileId), vertical_offsets: []const VerticalOffset,
+    continuing_annotations: []const *const Annotation(FileId)) anyerror!std.ArrayListUnmanaged(AnnotationData) {
     _ = tab_length;
 
-    var final_data = try std.ArrayListUnmanaged(std.ArrayListUnmanaged(AnnotationData)).initCapacity(allocator, 1);
+    var final_data = try std.ArrayListUnmanaged(AnnotationData).initCapacity(allocator, 0);
 
-    errdefer {
-        for (final_data.items) |*item| {
-            item.deinit(allocator);
-        }
-
-        final_data.deinit(allocator);
-    }
+    errdefer final_data.deinit(allocator);
 
     // How many elements from the start of continuing_annotations to take.
     // Exclusive, the index referred to is not included.
@@ -400,8 +394,8 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
     {
         var i: usize = 0;
 
-        while (i < continuing_annotations.items.len) : (i += 1) {
-            const start_line_index = try files.lineIndex(file_id, continuing_annotations.items[i].range.start, .inclusive) orelse unreachable;
+        while (i < continuing_annotations.len) : (i += 1) {
+            const start_line_index = try files.lineIndex(file_id, continuing_annotations[i].range.start, .inclusive) orelse unreachable;
 
             // Once we reach a continuing annotation that started on this line,
             // all the ones after it in the vector should start later too, so we can stop here.
@@ -419,7 +413,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
     var continue_next_line: bool = false;
     // starts_ends is usually iterated on in reverse, so this value is used to see how many annotations can already be skipped
     // because they were displayed on previous lines. This is an exclusive end index.
-    var annotation_end_index: usize = starts_ends.items.len;
+    var annotation_end_index: usize = starts_ends.len;
 
     var additional_continuing_annotations = try std.ArrayListUnmanaged(*const Annotation(FileId)).initCapacity(allocator, 0);
     defer additional_continuing_annotations.deinit(allocator);
@@ -427,18 +421,15 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
     while (true) : (current_vertical_offset += 1) {
         continue_next_line = false;
 
-        var line_data: std.ArrayListUnmanaged(AnnotationData) = try std.ArrayListUnmanaged(AnnotationData).initCapacity(allocator, 0);
-        errdefer line_data.deinit(allocator);
-
         {
             // Add continuing multiline data for annotations starting on previous lines
-            try line_data.ensureTotalCapacity(allocator, line_data.items.len + continuing_end_index + additional_continuing_annotations.items.len);
+            try final_data.ensureTotalCapacity(allocator, final_data.items.len + continuing_end_index + additional_continuing_annotations.items.len);
             var i: usize = 0;
 
             while (i < continuing_end_index) : (i += 1) {
-                const annotation = continuing_annotations.items[i];
+                const annotation = continuing_annotations[i];
 
-                line_data.addOneAssumeCapacity().* = AnnotationData { .continuing_multiline = ContinuingMultilineAnnotationData {
+                final_data.addOneAssumeCapacity().* = AnnotationData { .continuing_multiline = ContinuingMultilineAnnotationData {
                     .style = annotation.style,
                     .severity = diagnostic.severity,
                     .vertical_bar_index = i,
@@ -449,9 +440,9 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
             i = 0;
 
             while (i < additional_continuing_annotations.items.len) : (i += 1) {
-                const annotation = starts_ends.items[i].annotation;
+                const annotation = starts_ends[i].annotation;
 
-                line_data.addOneAssumeCapacity().* = AnnotationData { .continuing_multiline = ContinuingMultilineAnnotationData {
+                final_data.addOneAssumeCapacity().* = AnnotationData { .continuing_multiline = ContinuingMultilineAnnotationData {
                     .style = annotation.style,
                     .severity = diagnostic.severity,
                     .vertical_bar_index = continuing_end_index + i,
@@ -467,7 +458,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
 
             while (i > 0) {
                 i -= 1;
-                const vertical_offset = vertical_offsets.items[i];
+                const vertical_offset = vertical_offsets[i];
 
                 if (vertical_offset.connection < current_vertical_offset and vertical_offset.label < current_vertical_offset) {
                     annotation_end_index = i;
@@ -481,7 +472,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                 }
 
                 if (vertical_offset.connection == current_vertical_offset) {
-                    const start_end = starts_ends.items[i];
+                    const start_end = starts_ends[i];
 
                     const end_location = switch (start_end.data) {
                         .start => |data| data.location,
@@ -489,7 +480,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                         .both => continue,
                     };
 
-                    (try line_data.addOne(allocator)).* = AnnotationData { .connecting_multiline = ConnectingMultilineAnnotationData {
+                    (try final_data.addOne(allocator)).* = AnnotationData { .connecting_multiline = ConnectingMultilineAnnotationData {
                         .style = start_end.annotation.style,
                         .severity = diagnostic.severity,
                         .end_location = end_location,
@@ -503,7 +494,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
 
         if (current_vertical_offset == 0) {
             // Add start and end data
-            const line_data_new_start_index: usize = line_data.items.len;
+            const line_data_new_start_index: usize = final_data.items.len;
             var i: usize = 0;
 
             const CompareAnnotationData = struct {
@@ -524,37 +515,37 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                 }
             };
 
-            while (i < starts_ends.items.len) : (i += 1) {
-                const start_end = starts_ends.items[i];
+            while (i < starts_ends.len) : (i += 1) {
+                const start_end = starts_ends[i];
 
                 switch (start_end.data) {
-                    .start => |data| (try line_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.location, line_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                    .start => |data| (try final_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.location, final_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
                         AnnotationData { .start = StartAnnotationData {
                             .style = start_end.annotation.style,
                             .severity = diagnostic.severity,
                             .location = data.location,
                         }})),
-                    .end => |data| (try line_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.location, line_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                    .end => |data| (try final_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.location, final_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
                         AnnotationData { .end = EndAnnotationData {
                             .style = start_end.annotation.style,
                             .severity = diagnostic.severity,
                             .location = data.location,
                         }})),
                     .both => |data| {
-                        (try line_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.start.location, line_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                        (try final_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.start.location, final_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
                             AnnotationData { .start = StartAnnotationData {
                                 .style = start_end.annotation.style,
                                 .severity = diagnostic.severity,
                                 .location = data.start.location,
                             }}));
-                        (try line_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.start.location, line_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                        (try final_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.start.location, final_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
                             AnnotationData { .connecting_singleline = ConnectingSinglelineAnnotationData {
                                 .style = start_end.annotation.style, .as_multiline = false,
                                 .severity = diagnostic.severity,
                                 .line_index = data.start.location.line_index,
                                 .start_column_index = data.start.location.column_index, .end_column_index = data.end.location.column_index,
                             }}));
-                        (try line_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.end.location, line_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                        (try final_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.end.location, final_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
                             AnnotationData { .end = EndAnnotationData {
                                 .style = start_end.annotation.style,
                                 .severity = diagnostic.severity,
@@ -567,28 +558,28 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
             // Add hanging data
             var i: usize = 0;
 
-            while (i < starts_ends.items.len) : (i += 1) {
-                const start_end = starts_ends.items[i];
-                const vertical_offset = vertical_offsets.items[i];
+            while (i < starts_ends.len) : (i += 1) {
+                const start_end = starts_ends[i];
+                const vertical_offset = vertical_offsets[i];
 
                 if (vertical_offset.connection <= current_vertical_offset and vertical_offset.label <= current_vertical_offset) {
                     continue;
                 }
 
                 switch (start_end.data) {
-                    .start => |data| (try line_data.addOne(allocator)).* =
+                    .start => |data| (try final_data.addOne(allocator)).* =
                         AnnotationData { .hanging = HangingAnnotationData {
                             .style = start_end.annotation.style,
                             .severity = diagnostic.severity,
                             .location = data.location,
                         }},
-                    .end => |data| (try line_data.addOne(allocator)).* =
+                    .end => |data| (try final_data.addOne(allocator)).* =
                         AnnotationData { .hanging = HangingAnnotationData {
                             .style = start_end.annotation.style,
                             .severity = diagnostic.severity,
                             .location = data.location,
                         }},
-                    .both => |data| (try line_data.addOne(allocator)).* =
+                    .both => |data| (try final_data.addOne(allocator)).* =
                         AnnotationData { .hanging = HangingAnnotationData {
                             .style = start_end.annotation.style,
                             .severity = diagnostic.severity,
@@ -602,9 +593,9 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
             // Add label data
             var i: usize = 0;
 
-            while (i < starts_ends.items.len) : (i += 1) {
-                const start_end = starts_ends.items[i];
-                const vertical_offset = vertical_offsets.items[i];
+            while (i < starts_ends.len) : (i += 1) {
+                const start_end = starts_ends[i];
+                const vertical_offset = vertical_offsets[i];
 
                 if (vertical_offset.label < current_vertical_offset or start_end.annotation.label.len == 0) {
                     continue;
@@ -615,14 +606,14 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
 
                 switch (start_end.data) {
                     .start => continue,
-                    .end => |data| (try line_data.addOne(allocator)).* =
+                    .end => |data| (try final_data.addOne(allocator)).* =
                         AnnotationData { .label = LabelAnnotationData {
                             .style = start_end.annotation.style,
                             .severity = diagnostic.severity,
                             .location = data.location,
                             .label = start_end.annotation.label,
                         }},
-                    .both => |data| (try line_data.addOne(allocator)).* =
+                    .both => |data| (try final_data.addOne(allocator)).* =
                         AnnotationData { .label = LabelAnnotationData {
                             .style = start_end.annotation.style,
                             .severity = diagnostic.severity,
@@ -635,8 +626,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
             }
         }
 
-        // errdefer at the top of this block is allowed to trigger on this try, but not after it
-        (try final_data.addOne(allocator)).* = line_data;
+        (try final_data.addOne(allocator)).* = AnnotationData.newline;
 
         if (!continue_next_line) {
             break;

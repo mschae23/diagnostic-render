@@ -7,16 +7,10 @@ const Annotation = diag.Annotation(usize);
 const Span = diag.Span;
 
 const calculate = @import("../render/calculate/mod.zig");
-const ContinuingMultilineAnnotationData = calculate.ContinuingMultilineAnnotationData;
-const ConnectingMultilineAnnotationData = calculate.ConnectingMultilineAnnotationData;
 const StartAnnotationData = calculate.StartAnnotationData;
-const ConnectingSinglelineAnnotationData = calculate.ConnectingSinglelineAnnotationData;
 const EndAnnotationData = calculate.EndAnnotationData;
-const HangingAnnotationData = calculate.HangingAnnotationData;
-const LabelAnnotationData = calculate.LabelAnnotationData;
 const BothAnnotationData = calculate.BothAnnotationData;
 const StartEndAnnotationData = calculate.StartEndAnnotationData;
-const AnnotationData = calculate.AnnotationData;
 const StartEnd = calculate.StartEnd(usize);
 const VerticalOffset = calculate.VerticalOffset;
 

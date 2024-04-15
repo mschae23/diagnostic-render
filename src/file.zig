@@ -205,6 +205,7 @@ pub fn Files(comptime FileId: type) type {
                     var cp_1: ?u21 = null;
                     var grapheme_state = grapheme.State {};
                     var buf: [4]u8 = .{0} ** 4;
+                    var last_grapheme_break: bool = false;
 
                     while (remaining_bytes > 0) {
                         const codepoint = codepoint: {
@@ -255,6 +256,7 @@ pub fn Files(comptime FileId: type) type {
                         }
 
                         const grapheme_break = grapheme.graphemeBreak(cp_0.?, cp_1.?, &self.grapheme_data, &grapheme_state);
+                        last_grapheme_break = grapheme_break;
 
                         if (grapheme_break) {
                             if (cp_0 == '\t') {
@@ -267,13 +269,20 @@ pub fn Files(comptime FileId: type) type {
                         }
                     }
 
-                    if (index_mode == .inclusive) {
-                        // Ignore final codepoint if exlusive
-                        if (cp_1.? == '\t') {
-                            count += tab_length;
+                    if (last_grapheme_break) {
+                        if (index_mode == .inclusive) {
+                            if (cp_1.? == '\t') {
+                                count += tab_length;
+                            } else {
+                                _ = std.unicode.utf8Encode(cp_1.?, try gc_string.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(cp_1.?) catch unreachable)) catch unreachable;
+                                count += dw.strWidth(gc_string.items);
+                            }
                         } else {
-                            _ = std.unicode.utf8Encode(cp_1.?, try gc_string.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(cp_1.?) catch unreachable)) catch unreachable;
-                            count += dw.strWidth(gc_string.items);
+                            // Ignore next character if exclusive. There was a grapheme break between cp_0 and cp_1,
+                            // so there is definitely still a character after cp_0, which was the last one counted.
+                            // Since this is supposed to return an exclusive column index, increment count by one
+                            // to point to the next grapheme cluster.
+                            count += 1;
                         }
                     }
 

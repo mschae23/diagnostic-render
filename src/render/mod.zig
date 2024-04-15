@@ -391,24 +391,12 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
         }
 
         fn renderLineAnnotations(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, continuing_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId)), active_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {
-            var annotation_data = try calculate.calculate(FileId, allocator, diagnostic, &self.files, file_id, line_index, self.config.tab_length, continuing_annotations, active_annotations);
-
-            defer {
-                for (annotation_data.items) |*item| {
-                    item.deinit(allocator);
-                }
-
-                annotation_data.deinit(allocator);
-            }
+            var annotation_data = try calculate.calculate(FileId, allocator, diagnostic, &self.files, file_id, line_index, self.config.tab_length, continuing_annotations.items, active_annotations.items);
+            defer annotation_data.deinit(allocator);
 
             for (annotation_data.items) |item| {
                 try self.writer.writeAll("[debug] ");
-
-                for (item.items) |item2| {
-                    try self.writer.print("{any}, ", .{item2});
-                }
-
-                try self.writer.writeByte('\n');
+                try self.writer.print("{any}\n", .{item});
             }
         }
 

@@ -133,5 +133,6 @@ pub const AnnotationData = union(enum) {
     end: EndAnnotationData,
     hanging: HangingAnnotationData,
     label: LabelAnnotationData,
+    newline,
 };
 
