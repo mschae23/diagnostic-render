@@ -89,6 +89,11 @@ pub fn Files(comptime FileId: type) type {
             self.line_starts.deinit();
         }
 
+        /// Returns the name associated with the given [`FileId`].
+        ///
+        /// The return value is only `null` if no file with this ID exists.
+        ///
+        /// [`FileId`]: FileId
         pub fn name(self: *const Self, file_id: FileId) ?[:0]const u8 {
             const opt_file_data = self.files.get(file_id);
 
@@ -99,6 +104,13 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
+        /// Returns the reader associated with the given [`FileId`]. This reader is associated with the seeker
+        /// returned by [`seeker`].
+        ///
+        /// The return value is only `null` if no file with this ID exists.
+        ///
+        /// [`FileId`]: FileId
+        /// [`seeker`]: seeker
         pub fn reader(self: *const Self, file_id: FileId) ?std.io.AnyReader {
             const opt_file_data = self.files.get(file_id);
 
@@ -109,6 +121,13 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
+        /// Returns the seeker associated with the given [`FileId`]. This seeker is associated with the reader
+        /// returned by [`reader`].
+        ///
+        /// The return value is only `null` if no file with this ID exists.
+        ///
+        /// [`FileId`]: FileId
+        /// [`reader`]: reader
         pub fn seeker(self: *const Self, file_id: FileId) ?io.AnySeekableStream {
             const opt_file_data = self.files.get(file_id);
 
@@ -119,6 +138,18 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
+        /// Returns the line index of the character at a given byte index in a file. If the byte index is greater than or
+        /// equal to the file's length, it returns the last line index, so the returned value is never `null` for valid
+        /// files.
+        ///
+        /// If `index_mode` is `.exclusive`, this function instead looks up the line index for the byte index preceding
+        /// the given value.
+        ///
+        /// This function requires the file source to be encoded with UTF-8. However, it has no requirements for the
+        /// `byte_index` value.
+        ///
+        /// The return value is only `null` if no file with this ID exists. However, the underlying reader and seeker
+        /// can error for any reason.
         pub fn lineIndex(self: *Self, file_id: FileId, byte_index: usize, index_mode: IndexMode) anyerror!?usize {
             const opt_line_starts = try self.getOrComputeLineStarts(file_id);
 
@@ -147,6 +178,10 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
+        /// Returns the line index of the last line in a file.
+        ///
+        /// The return value is only `null` if no file with this ID exists. However, the underlying reader and seeker
+        /// can error for any reason.
         pub fn getLastLineIndex(self: *Self, file_id: FileId) anyerror!?usize {
             const opt_line_starts = try self.getOrComputeLineStarts(file_id);
 
@@ -157,12 +192,21 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
+        /// Returns the user-facing line number for a given line index in a file.
+        ///
+        /// While the distinction is technically important, as a language could, for example, define something
+        /// like C's `#line` preprocessor instruction, no such feature is supported by this library.
+        /// Therefore, this function practically just returns the given line index incremented by one (1).
         pub fn lineNumber(self: *Self, file_id: FileId, line_index: usize) usize {
             _ = self;
             _ = file_id;
             return line_index + 1;
         }
 
+        /// Returns the byte range of a line in a file.
+        ///
+        /// The return value is only `null` if no file with this ID exists. However, the underlying reader and seeker
+        /// can error for any reason.
         pub fn lineRange(self: *Self, file_id: FileId, line_index: usize) anyerror!?LineRange {
             const opt_line_starts = try self.getOrComputeLineStarts(file_id);
 
@@ -180,6 +224,20 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
+        /// Returns the column index of a character in a file.
+        ///
+        /// If `index_mode` is `.exclusive`, this function instead looks up the column index for the preceding character.
+        ///
+        /// This function requires the file's source to be encoded in UTF-8. The provided `byte_index` must point to the first byte
+        /// of the first UTF-8 codepoint of an extended grapheme cluster in the file. While pointing into the middle of a UTF-8
+        /// codepoint is detectable (but may incur non-useful behaviour), it is unclear how to proceed if `byte_index` points to a codepoint
+        /// that is not immediately following a grapheme boundary.
+        ///
+        /// The returned value is not a simple byte offset into the line, but rather the column (`0`-indexed) at which the character would
+        /// be displayed in a display using a fixed-width font, such as a terminal.
+        ///
+        /// The return value is only `null` if no file with this ID exists. However, the underlying reader and seeker
+        /// can error for any reason.
         pub fn columnIndex(self: *Self, file_id: FileId, line_index: usize, byte_index: usize, index_mode: IndexMode, tab_length: usize) anyerror!?usize {
             const opt_line_range = try self.lineRange(file_id, line_index);
 
@@ -224,7 +282,7 @@ pub fn Files(comptime FileId: type) type {
                                             error.EndOfStream => {
                                                 break;
                                             },
-                                            else => return err2,
+                                            else => return err,
                                         };
                                         _ = std.unicode.utf8ByteSequenceLength(byte2) catch |err3| switch (err3) {
                                             error.Utf8InvalidStartByte => continue,
@@ -286,6 +344,28 @@ pub fn Files(comptime FileId: type) type {
                         }
                     }
 
+                    // Byte index points to cp_1 at this point. If there was no grapheme break here, cp_1 is still part of the
+                    // last grapheme cluster. That is not a valid byte index. In exclusive mode, this can be remedied by simply
+                    // not incrementing the count at this point; however, in inclusive mode, the grapheme cluster that it is pointing
+                    // into has not been counted yet when it technically should, but we cannot use dw.strWidth because the sequence of
+                    // codepoints is incomplete.
+                    //
+                    // Potential ways to deal with this:
+                    // 1. Simply increment count by one. Simple, but most likely wrong.
+                    // 2. Read until next grapheme cluster boundary. Could be undesirable.
+
+                    // TODO Rewrite this whole function. `byte_index` points to the first byte of the *next* character - the next
+                    // character should not be counted even in inclusive mode. Even if byte_index is invalid and points into the middle
+                    // of a UTF-8 codepoint or even the middle of a grapheme cluster, it doesn't matter. The last grapheme boundary is
+                    // all that counts. Exclusive mode is even simpler, the last grapheme boundary doesn't even count anymore.
+                    //
+                    // Steps to implement this properly:
+                    // 1. Read the characters normally until byte_index (the function already does this)
+                    // 2. Read the UTF-8 codepoint at byte_index to see whether there is a grapheme boundary at this index.
+                    //   - the function documentation requires there to be one. If there is one, count it.
+                    //   - if there isn't one, just don't count any codepoints since the last boundary, since this byte index is technically
+                    //     already referring to the *next* character.
+
                     return count;
                 } else {
                     return null;
@@ -295,12 +375,23 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
+        /// Returns the user-facing column number for a given column index in a file.
+        ///
+        /// While the distinction is technically important, no feature distinguishing between them is supported by this library.
+        /// Therefore, this function practically just returns the given column index incremented by one (1).
         pub fn columnNumber(self: *Self, file_id: FileId, column_index: usize) usize {
             _ = self;
             _ = file_id;
             return column_index + 1;
         }
 
+        /// Returns both [line] and [column] indices for a given character in a file.
+        ///
+        /// The return value is only `null` if no file with this ID exists. However, the underlying reader and seeker
+        /// can error for any reason.
+        ///
+        /// [line]: lineIndex
+        /// [column]: columnIndex
         pub fn lineColumn(self: *Self, file_id: FileId, byte_index: usize, index_mode: IndexMode, tab_length: usize) anyerror!?LineColumn {
             const opt_line_index = try self.lineIndex(file_id, byte_index, index_mode);
 
@@ -314,6 +405,13 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
+        /// Returns both user-facing [line] and [column] numbers for a given character in a file.
+        ///
+        /// The return value is only `null` if no file with this ID exists. However, the underlying reader and seeker
+        /// can error for any reason.
+        ///
+        /// [line]: lineNumber
+        /// [column]: columnNumber
         pub fn location(self: *Self, file_id: FileId, byte_index: usize, index_mode: IndexMode, tab_length: usize) anyerror!?Location {
             const opt_line_index = try self.lineIndex(file_id, byte_index, index_mode);
 
@@ -327,6 +425,7 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
+        /// Internal, static helper function to generate the line starts table.
         fn lineStarts(allocator: std.mem.Allocator, source: std.io.AnyReader) anyerror!std.ArrayListUnmanaged(usize) {
             var line_starts = try std.ArrayListUnmanaged(usize).initCapacity(allocator, 2);
             line_starts.addOneAssumeCapacity().* = 0;
@@ -346,6 +445,11 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
+        /// Returns or computes the line starts table, which is a simple list containing the start byte index for every line index
+        /// in a file.
+        ///
+        /// The return value is only `null` if no file with this ID exists. However, the underlying reader and seeker
+        /// can error for any reason.
         fn getOrComputeLineStarts(self: *Self, file_id: FileId) anyerror!?std.ArrayListUnmanaged(usize) {
             const entry = try self.line_starts.getOrPut(file_id);
 
