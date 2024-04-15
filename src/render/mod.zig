@@ -109,7 +109,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                         }
                     }.inner), annotation);
 
-                    const line_index = (try self.files.lineIndex(annotation.file_id, annotation.range.end)) orelse return error.FileNotFound;
+                    const line_index = (try self.files.lineIndex(annotation.file_id, annotation.range.end, .exclusive)) orelse return error.FileNotFound;
                     const line_number = self.files.lineNumber(annotation.file_id, line_index);
                     max_line_number = @max(max_line_number, line_number);
                 }
@@ -187,7 +187,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             try self.colors.setColor(self.writer, self.config.colors.path);
             try self.writer.writeAll(self.files.name(file_id) orelse return error.FileNotFound);
 
-            const user_location = try self.files.location(file_id, location, self.config.tab_length) orelse unreachable;
+            const user_location = try self.files.location(file_id, location, .inclusive, self.config.tab_length) orelse unreachable;
 
             try self.writer.print(":{d}:{d}\n", .{user_location.line_number, user_location.column_number});
             try self.colors.setColor(self.writer, self.config.colors.reset);
@@ -200,8 +200,8 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 defer current_nested_blocks.deinit(allocator);
 
                 for (annotations.items) |annotation| {
-                    const start_line_index = try self.files.lineIndex(file_id, annotation.range.start) orelse unreachable;
-                    const end_line_index = try self.files.lineIndex(file_id, annotation.range.end) orelse unreachable;
+                    const start_line_index = try self.files.lineIndex(file_id, annotation.range.start, .inclusive) orelse unreachable;
+                    const end_line_index = try self.files.lineIndex(file_id, annotation.range.end, .exclusive) orelse unreachable;
 
                     if (start_line_index == end_line_index) {
                         continue;
@@ -233,11 +233,11 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
         }
 
         fn renderLinesWithAnnotations(self: *Self, diagnostic_allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, annotations: *std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {
-            var current_line_index: usize = try self.files.lineIndex(file_id, annotations.items[0].range.start) orelse unreachable;
+            var current_line_index: usize = try self.files.lineIndex(file_id, annotations.items[0].range.start, .inclusive) orelse unreachable;
             var last_line_index: ?usize = null;
             var already_printed_end_line_index: usize = 0;
 
-            const last_line_index_to_process = try self.files.lineIndex(file_id, annotations.getLast().range.end) orelse unreachable;
+            const last_line_index_to_process = try self.files.lineIndex(file_id, annotations.getLast().range.end, .exclusive) orelse unreachable;
 
             var line_allocator = std.heap.ArenaAllocator.init(diagnostic_allocator);
             defer line_allocator.deinit();
@@ -259,8 +259,8 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
                 while (i < annotations.items.len) : (i += 1) {
                     const annotation = annotations.items[i];
-                    const start_line_index = try self.files.lineIndex(file_id, annotation.range.start) orelse unreachable;
-                    const end_line_index = try self.files.lineIndex(file_id, annotation.range.end) orelse unreachable;
+                    const start_line_index = try self.files.lineIndex(file_id, annotation.range.start, .inclusive) orelse unreachable;
+                    const end_line_index = try self.files.lineIndex(file_id, annotation.range.end, .exclusive) orelse unreachable;
 
                     if (start_line_index > current_line_index) {
                         break;

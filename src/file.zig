@@ -17,6 +17,13 @@ pub const LineRange = struct {
     end: usize,
 };
 
+/// Represents the way a byte index should be treated, i. e.
+/// whether it is inclusive or exclusive.
+pub const IndexMode = enum {
+    inclusive,
+    exclusive,
+};
+
 /// Represents a location in a specific source file,
 /// using line and column indices.
 ///
@@ -112,7 +119,7 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
-        pub fn lineIndex(self: *Self, file_id: FileId, byte_index: usize) anyerror!?usize {
+        pub fn lineIndex(self: *Self, file_id: FileId, byte_index: usize, index_mode: IndexMode) anyerror!?usize {
             const opt_line_starts = try self.getOrComputeLineStarts(file_id);
 
             if (opt_line_starts) |line_starts| {
@@ -125,7 +132,10 @@ pub fn Files(comptime FileId: type) type {
                     const mid = left + (right - left) / 2;
                     // Compare the key with the midpoint element
                     switch (std.math.order(byte_index, line_starts.items[mid])) {
-                        .eq => return mid,
+                        .eq => return switch (index_mode) {
+                            .inclusive => mid,
+                            .exclusive => mid -| 1,
+                        },
                         .gt => left = mid + 1,
                         .lt => right = mid,
                     }
@@ -170,11 +180,13 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
-        pub fn columnIndex(self: *Self, file_id: FileId, line_index: usize, byte_index: usize, tab_length: usize) anyerror!?usize {
+        pub fn columnIndex(self: *Self, file_id: FileId, line_index: usize, byte_index: usize, index_mode: IndexMode, tab_length: usize) anyerror!?usize {
             const opt_line_range = try self.lineRange(file_id, line_index);
 
             if (opt_line_range) |line_range| {
-                if (byte_index < line_range.start or byte_index >= line_range.end) {
+                if (byte_index < line_range.start or byte_index > line_range.end) {
+                    return null;
+                } else if (index_mode == .inclusive and byte_index >= line_range.end) {
                     return null;
                 }
 
@@ -255,12 +267,16 @@ pub fn Files(comptime FileId: type) type {
                         }
                     }
 
-                    if (cp_1.? == '\t') {
-                        count += tab_length;
-                    } else {
-                        _ = std.unicode.utf8Encode(cp_1.?, try gc_string.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(cp_1.?) catch unreachable)) catch unreachable;
-                        count += dw.strWidth(gc_string.items);
+                    if (index_mode == .inclusive) {
+                        // Ignore final codepoint if exlusive
+                        if (cp_1.? == '\t') {
+                            count += tab_length;
+                        } else {
+                            _ = std.unicode.utf8Encode(cp_1.?, try gc_string.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(cp_1.?) catch unreachable)) catch unreachable;
+                            count += dw.strWidth(gc_string.items);
+                        }
                     }
+
                     return count;
                 } else {
                     return null;
@@ -276,26 +292,26 @@ pub fn Files(comptime FileId: type) type {
             return column_index + 1;
         }
 
-        pub fn lineColumn(self: *Self, file_id: FileId, byte_index: usize, tab_length: usize) anyerror!?LineColumn {
-            const opt_line_index = try self.lineIndex(file_id, byte_index);
+        pub fn lineColumn(self: *Self, file_id: FileId, byte_index: usize, index_mode: IndexMode, tab_length: usize) anyerror!?LineColumn {
+            const opt_line_index = try self.lineIndex(file_id, byte_index, index_mode);
 
             if (opt_line_index) |line_index| {
                 return LineColumn {
                     .line_index = line_index,
-                    .column_index = try self.columnIndex(file_id, line_index, byte_index, tab_length) orelse unreachable,
+                    .column_index = try self.columnIndex(file_id, line_index, byte_index, index_mode, tab_length) orelse unreachable,
                 };
             } else {
                 return null;
             }
         }
 
-        pub fn location(self: *Self, file_id: FileId, byte_index: usize, tab_length: usize) anyerror!?Location {
-            const opt_line_index = try self.lineIndex(file_id, byte_index);
+        pub fn location(self: *Self, file_id: FileId, byte_index: usize, index_mode: IndexMode, tab_length: usize) anyerror!?Location {
+            const opt_line_index = try self.lineIndex(file_id, byte_index, index_mode);
 
             if (opt_line_index) |line_index| {
                 return Location {
                     .line_number = self.lineNumber(file_id, line_index),
-                    .column_number = self.columnNumber(file_id, try self.columnIndex(file_id, line_index, byte_index, tab_length) orelse unreachable),
+                    .column_number = self.columnNumber(file_id, try self.columnIndex(file_id, line_index, byte_index, index_mode, tab_length) orelse unreachable),
                 };
             } else {
                 return null;

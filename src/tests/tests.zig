@@ -24,7 +24,7 @@ test "Development" {
 
     const diagnostics = .{
         diag.Diagnostic(usize).err().with_name("thing/test").with_message("Test").with_annotations(&.{
-            diag.Annotation(usize).primary(0, diag.Span.init(7, 44 + 35)).with_label("Annotation")
+            diag.Annotation(usize).primary(0, diag.Span.init(12, 44 + 35 + 2)).with_label("Annotation")
         })
     };
 
@@ -33,4 +33,9 @@ test "Development" {
 
     var renderer = render.DiagnosticRenderer(usize).init(std.testing.allocator, output.writer().any(), std.io.tty.detectConfig(output), files, .{});
     try renderer.render(&diagnostics);
+}
+
+test {
+    std.testing.refAllDeclsRecursive(@This());
+    std.testing.refAllDeclsRecursive(@import("./calculate.zig"));
 }
