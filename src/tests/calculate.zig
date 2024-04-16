@@ -35,7 +35,7 @@ pub const vertical_offsets = struct {
             try runTest(&.{
                 StartEnd {
                     .annotation = &annotation1,
-                    .data = StartEndAnnotationData { .both = BothAnnotationData {
+                    .data = StartEndAnnotationData { .both = .{
                         .start = StartAnnotationData {
                             .style = annotation1.style,
                             .severity = .@"error",
@@ -52,7 +52,7 @@ pub const vertical_offsets = struct {
             try runTest(&.{
                 StartEnd {
                     .annotation = &annotation2,
-                    .data = StartEndAnnotationData { .both = BothAnnotationData {
+                    .data = StartEndAnnotationData { .both = .{
                         .start = StartAnnotationData {
                             .style = annotation2.style,
                             .severity = .@"error",
@@ -80,7 +80,7 @@ pub const vertical_offsets = struct {
             try runTest(&.{
                 StartEnd {
                     .annotation = &annotation2,
-                    .data = StartEndAnnotationData { .both = BothAnnotationData {
+                    .data = StartEndAnnotationData { .both = .{
                         .start = StartAnnotationData {
                             .style = annotation2.style,
                             .severity = .@"error",
@@ -95,7 +95,7 @@ pub const vertical_offsets = struct {
                 },
                 StartEnd {
                     .annotation = &annotation1,
-                    .data = StartEndAnnotationData { .both = BothAnnotationData {
+                    .data = StartEndAnnotationData { .both = .{
                         .start = StartAnnotationData {
                             .style = annotation1.style,
                             .severity = .@"error",
@@ -127,7 +127,7 @@ pub const vertical_offsets = struct {
             try runTest(&.{
                 StartEnd {
                     .annotation = &annotation1,
-                    .data = StartEndAnnotationData { .both = BothAnnotationData {
+                    .data = StartEndAnnotationData { .both = .{
                         .start = StartAnnotationData {
                             .style = annotation1.style,
                             .severity = .@"error",
@@ -142,7 +142,7 @@ pub const vertical_offsets = struct {
                 },
                 StartEnd {
                     .annotation = &annotation2,
-                    .data = StartEndAnnotationData { .both = BothAnnotationData {
+                    .data = StartEndAnnotationData { .both = .{
                         .start = StartAnnotationData {
                             .style = annotation2.style,
                             .severity = .@"error",
@@ -172,7 +172,7 @@ pub const vertical_offsets = struct {
             try runTest(&.{
                 StartEnd {
                     .annotation = &annotation1,
-                    .data = StartEndAnnotationData { .end = EndAnnotationData {
+                    .data = StartEndAnnotationData { .end = .{
                         .style = annotation1.style,
                         .severity = .@"error",
                         .location = LineColumn.init(1, 4),
@@ -199,7 +199,7 @@ pub const vertical_offsets = struct {
             try runTest(&.{
                 StartEnd {
                     .annotation = &annotation2,
-                    .data = StartEndAnnotationData { .end = EndAnnotationData {
+                    .data = StartEndAnnotationData { .end = .{
                         .style = annotation2.style,
                         .severity = .@"error",
                         .location = LineColumn.init(1, 4),
@@ -207,7 +207,7 @@ pub const vertical_offsets = struct {
                 },
                 StartEnd {
                     .annotation = &annotation1,
-                    .data = StartEndAnnotationData { .end = EndAnnotationData {
+                    .data = StartEndAnnotationData { .end = .{
                         .style = annotation1.style,
                         .severity = .@"error",
                         .location = LineColumn.init(1, 13),
@@ -235,7 +235,7 @@ pub const vertical_offsets = struct {
             try runTest(&.{
                 StartEnd {
                     .annotation = &annotation1,
-                    .data = StartEndAnnotationData { .end = EndAnnotationData {
+                    .data = StartEndAnnotationData { .end = .{
                         .style = annotation1.style,
                         .severity = .@"error",
                         .location = LineColumn.init(1, 4),
@@ -243,7 +243,7 @@ pub const vertical_offsets = struct {
                 },
                 StartEnd {
                     .annotation = &annotation2,
-                    .data = StartEndAnnotationData { .end = EndAnnotationData {
+                    .data = StartEndAnnotationData { .end = .{
                         .style = annotation2.style,
                         .severity = .@"error",
                         .location = LineColumn.init(1, 13),
@@ -267,7 +267,7 @@ pub const vertical_offsets = struct {
             try runTest(&.{
                 StartEnd {
                     .annotation = &annotation1,
-                    .data = StartEndAnnotationData { .start = StartAnnotationData {
+                    .data = StartEndAnnotationData { .start = .{
                         .style = annotation1.style,
                         .severity = .@"error",
                         .location = LineColumn.init(0, 4),
@@ -292,7 +292,7 @@ pub const vertical_offsets = struct {
             try runTest(&.{
                 StartEnd {
                     .annotation = &annotation2,
-                    .data = StartEndAnnotationData { .both = BothAnnotationData {
+                    .data = StartEndAnnotationData { .both = .{
                         .start = StartAnnotationData {
                             .style = annotation2.style,
                             .severity = .@"error",
@@ -307,7 +307,7 @@ pub const vertical_offsets = struct {
                 },
                 StartEnd {
                     .annotation = &annotation1,
-                    .data = StartEndAnnotationData { .start = StartAnnotationData {
+                    .data = StartEndAnnotationData { .start = .{
                         .style = annotation1.style,
                         .severity = .@"error",
                         .location = LineColumn.init(0, 11),
@@ -335,7 +335,7 @@ pub const vertical_offsets = struct {
             try runTest(&.{
                 StartEnd {
                     .annotation = &annotation2,
-                    .data = StartEndAnnotationData { .end = EndAnnotationData {
+                    .data = StartEndAnnotationData { .end = .{
                         .style = annotation2.style,
                         .severity = .@"error",
                         .location = LineColumn.init(1, 9),
@@ -343,7 +343,7 @@ pub const vertical_offsets = struct {
                 },
                 StartEnd {
                     .annotation = &annotation1,
-                    .data = StartEndAnnotationData { .start = StartAnnotationData {
+                    .data = StartEndAnnotationData { .start = .{
                         .style = annotation1.style,
                         .severity = .@"error",
                         .location = LineColumn.init(1, 13),

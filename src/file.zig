@@ -240,8 +240,14 @@ pub fn Files(comptime FileId: type) type {
             const opt_line_range = try self.lineRange(file_id, line_index);
 
             if (opt_line_range) |line_range| {
-                if (byte_index < line_range.start or byte_index > line_range.end) {
-                    return null;
+                var byte_index_2 = byte_index;
+
+                if (byte_index < line_range.start) {
+                    return 0;
+                } else if (byte_index >= line_range.end) {
+                    // To ensure that this function does not read into the next line, but also
+                    // returns a useful result even if the byte_index is technically out of bounds.
+                    byte_index_2 = line_range.end;
                 }
 
                 const opt_file_data = self.files.get(file_id);
@@ -269,8 +275,8 @@ pub fn Files(comptime FileId: type) type {
 
                     var i: usize = line_range.start;
 
-                    // Use <= to read the codepoint at byte_index as well
-                    while (i <= byte_index or bytes_needed != 0) {
+                    // Use <= to read the codepoint at byte_index_2 as well
+                    while (i <= byte_index_2 or bytes_needed != 0) {
                         const current_codepoint = codepoint: {
                             i += 1;
                             const byte = file_data.reader.readByte() catch |err| switch (err) {
