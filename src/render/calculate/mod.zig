@@ -167,6 +167,11 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
     //    | |____________|                       label 2
     //    |              label 3
     {
+        // TODO This is actually iterating in descending end byte index, not start (because starts_ends is sorted by the column index
+        //      the annotation is using on *this* line). Change this to actually iterate in descending start byte index order,
+        //      which may require allocating another list and filling it with starts_ends indices in the annotations' start byte
+        //      index order, which is then used for the actual iteration.
+
         var i: usize = starts_ends.len;
 
         while (i > 0) {
@@ -189,7 +194,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                         // In this case, all vertical offsets need to be incremented by 1.
 
                         if (i > 0) {
-                            // Another special case: if there are any other annotations before this rightmost ending
+                            // Another special case: if there are any other annotations before this ending
                             // annotation, use vertical offset 1 at minimum.
                             next_connection_offset = 1;
                             next_label_offset = 2;
@@ -212,7 +217,80 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
         }
     }
 
-    // Process all other kinds of annotations (single-line and starting).
+    // Process the annotations starting on this line.
+    //
+    // Iterates through all multi-line annotations starting on this line in
+    // ascending start byte index order, to be able to assign lower vertical offsets
+    // to the continuing vertical bars that are more on the right, to avoid intersecting lines.
+    //
+    // === Examples ===
+    // Here, there is only a single starting annotation:
+    //
+    // 23 |   pub fn test(&mut self, arg: i32) -> bool {
+    //    |  _____________^
+    //    | |
+    //
+    // Multiple ending annotations get incrementing vertical offsets for ascending start byte indices:
+    //
+    // 23 |       pub fn test(&mut self, arg: i32) -> bool {
+    //    |  ____________^                       ^         ^
+    //    | |  __________________________________|         |
+    //    | | |  __________________________________________|
+    //    | | | |
+    //
+    // Behaviour when interacting with ending and single-line annotations:
+    //
+    // 23 | | pub fn test(&mut self, arg: i32) -> bool {
+    //    | |     ^  ^^^^                    ^         ^
+    //    | |_____|__|_________________________________|
+    //    |  _____|  |                                 label 1
+    //    | |        label 3
+    //
+    // 23 |     pub fn test(&mut self, arg: i32) -> bool {
+    //    |  __________^               --------          ^
+    //    | |  ________________________|_________________|
+    //    | | |                        |
+    //    | | |                        label 1
+    {
+        var i: usize = 0;
+        var first: bool = true;
+
+        while (i < starts_ends.len) : (i += 1) {
+            const start_end = starts_ends[i];
+            const annotation = start_end.annotation;
+            _ = annotation;
+
+            switch (start_end.data) {
+                .start => |data| {
+                    _ = data;
+
+                    if (!first and next_connection_offset == 0) {
+                        next_connection_offset = 1;
+                        next_label_offset = 2;
+                    }
+
+                    vertical_offsets.items[i].connection = next_connection_offset;
+                    vertical_offsets.items[i].label = 0;
+                    next_connection_offset += 1;
+                    next_label_offset += 1;
+
+                    if (next_label_offset == 1) {
+                        next_label_offset = 2;
+                    }
+                },
+                .end => |data| {
+                    _ = data;
+                    first = false;
+                },
+                .both => |data| {
+                    _ = data;
+                    first = false;
+                },
+            }
+        }
+    }
+
+    // Process all kinds of annotations again, but especially single-line.
     //
     // The start / end data vector is iterated in reverse and every annotation is given incrementing
     // vertical offsets.
@@ -249,7 +327,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
     //    | | |________|_______________________|_________|
     //    | |__________|_______________________|         label 1
     //    |  __________|                       label 2
-    //    | |          label 3
+    //    | |
     //
     // However, if they start *after* one of the ending annotations ends, they cause all preceding ending
     // annotations to get an additional vertical offset for their label:
@@ -259,8 +337,8 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
     //    | | |________|_______________________|_________|
     //    | |__________|                       |         label 1
     //    |  __________|_______________________|
-    //    | |          |                       label 2
-    //    | |          label 3
+    //    | |          |
+    //    | |          label 2
     //
     // With multiple starting annotations:
     //
@@ -268,10 +346,10 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
     //    | | |        ^               ^       ^         ^
     //    | | |________|_______________|_______|_________|
     //    | |__________|               |       |         label 1
-    //    |  __________|_______________|_______|
-    //    | |  ________|_______________|       label 2
-    //    | | |        |               label 3
-    //    | | |        label 4
+    //    |  __________|_______________|       |
+    //    | |  ________|_______________________|
+    //    | | |        |
+    //    | | |        label 2
     //
     // However, this just works in a normal way again for preceding single-line annotations:
     //
@@ -279,7 +357,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
     //    | |        ^^^^                    ^         ^
     //    | |________|_______________________|_________|
     //    |  ________|_______________________|         label 1
-    //    | |        |                       label 2
+    //    | |        |
     //    | |        label 3
 
     {
@@ -297,28 +375,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                 .start => |data| {
                     _ = data;
 
-                    if (next_connection_offset == 0) {
-                        // Special case for when there is a rightmost starting annotation,
-                        // but there is another annotation before it.
-                        // In this case, all vertical offsets need to be incremented by 1.
-
-                        if (i > 0) {
-                            // Another special case: if there are any other annotations before this rightmost ending
-                            // annotation, use vertical offset 1 at minimum.
-                            next_connection_offset = 1;
-                            next_label_offset = 2;
-                        }
-                    }
-
-                    vertical_offsets.items[i].connection = next_connection_offset;
-                    vertical_offsets.items[i].label = 0;
-                    next_connection_offset += 1;
-                    next_label_offset += 1;
                     ending_label_offset += 1;
-
-                    if (next_label_offset == 1) {
-                        next_label_offset = 2;
-                    }
 
                     if (ending_label_offset == 1) {
                         ending_label_offset = 2;
@@ -399,6 +456,8 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
     continuing_annotations: []const *const Annotation(FileId)) anyerror!std.ArrayListUnmanaged(AnnotationData) {
     _ = tab_length;
 
+    std.debug.print("[debug] Vertical offsets: {any}\n", .{vertical_offsets});
+
     var final_data = try std.ArrayListUnmanaged(AnnotationData).initCapacity(allocator, 0);
 
     errdefer final_data.deinit(allocator);
@@ -427,9 +486,6 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
 
     var current_vertical_offset: usize = 0;
     var continue_next_line: bool = false;
-    // starts_ends is usually iterated on in reverse, so this value is used to see how many annotations can already be skipped
-    // because they were displayed on previous lines. This is an exclusive end index.
-    var annotation_end_index: usize = starts_ends.len;
 
     var additional_continuing_annotations = try std.ArrayListUnmanaged(*const Annotation(FileId)).initCapacity(allocator, 0);
     defer additional_continuing_annotations.deinit(allocator);
@@ -466,25 +522,51 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
             }
         }
 
-        var next_connection_offset_annotation_index: usize = 0;
-
         {
-            // Add connecting multiline data
-            var i: usize = annotation_end_index;
+            // Add additional continuing annotation for annotation connecting on this line
+            var i: usize = 0;
 
-            while (i > 0) {
-                i -= 1;
+            while (i < starts_ends.len) : (i += 1) {
                 const vertical_offset = vertical_offsets[i];
 
-                if (vertical_offset.connection < current_vertical_offset and vertical_offset.label < current_vertical_offset) {
-                    annotation_end_index = i;
+                if (vertical_offset.connection < current_vertical_offset) {
                     continue;
                 }
 
                 if (vertical_offset.connection > current_vertical_offset) {
                     continue_next_line = true;
-                    next_connection_offset_annotation_index = i;
+                    continue;
+                }
+
+                if (vertical_offset.connection == current_vertical_offset) {
+                    const start_end = starts_ends[i];
+
+                    switch (start_end.data) {
+                        .start => {},
+                        .end => continue,
+                        .both => continue,
+                    }
+
+                    (try additional_continuing_annotations.addOne(allocator)).* = start_end.annotation;
                     break;
+                }
+            }
+        }
+
+        {
+            // Add connecting multiline data
+            var i: usize = 0;
+
+            while (i < starts_ends.len) : (i += 1) {
+                const vertical_offset = vertical_offsets[i];
+
+                if (vertical_offset.connection < current_vertical_offset and vertical_offset.label < current_vertical_offset) {
+                    continue;
+                }
+
+                if (vertical_offset.connection > current_vertical_offset) {
+                    continue_next_line = true;
+                    continue;
                 }
 
                 if (vertical_offset.connection == current_vertical_offset) {
@@ -500,7 +582,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                         .style = start_end.annotation.style,
                         .severity = diagnostic.severity,
                         .end_location = end_location,
-                        .vertical_bar_index = continuing_end_index + additional_continuing_annotations.items.len,
+                        .vertical_bar_index = (continuing_end_index + additional_continuing_annotations.items.len) - 1,
                     }};
 
                     break;
@@ -533,6 +615,11 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
 
             while (i < starts_ends.len) : (i += 1) {
                 const start_end = starts_ends[i];
+                const vertical_offset = vertical_offsets[i];
+
+                if (vertical_offset.connection > current_vertical_offset or vertical_offset.label > current_vertical_offset) {
+                    continue_next_line = true;
+                }
 
                 switch (start_end.data) {
                     .start => |data| (try final_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.location, final_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
@@ -578,7 +665,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                 const start_end = starts_ends[i];
                 const vertical_offset = vertical_offsets[i];
 
-                if (vertical_offset.connection <= current_vertical_offset and vertical_offset.label <= current_vertical_offset) {
+                if (vertical_offset.connection < current_vertical_offset or (vertical_offset.label != 0 and vertical_offset.label <= current_vertical_offset)) {
                     continue;
                 }
 
