@@ -224,9 +224,7 @@ pub fn Files(comptime FileId: type) type {
             }
         }
 
-        /// Returns the column index of a character in a file.
-        ///
-        /// If `index_mode` is `.exclusive`, this function instead looks up the column index for the preceding character.
+        /// Returns the column index of a character in a file, with its line index already given.
         ///
         /// This function requires the file's source to be encoded in UTF-8. The provided `byte_index` must point to the first byte
         /// of the first UTF-8 codepoint of an extended grapheme cluster in the file. While pointing into the middle of a UTF-8
