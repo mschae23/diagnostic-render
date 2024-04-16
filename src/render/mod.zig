@@ -368,11 +368,17 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
                     try seeker.seekTo(@as(u64, line_range.start));
 
+                    // TODO Handle UTF-8 manually as specified in https://encoding.spec.whatwg.org/#utf-8-decoder.
+                    //      This way, we can ensure that ill-conforming code unit sequences are handled the exact
+                    //      same way as Files.columnIndex.
+                    //      The drawback is that, while it won't need the allocator anymore, this function will
+                    //      have to stream the line from the reader to the writer byte for byte (because it has to
+                    //      constantly decode and re-encode the UTF-8 data).
+
                     const buf: []u8 = try allocator.alloc(u8, line_range.end - line_range.start);
                     defer allocator.free(buf);
                     try reader.readNoEof(buf);
 
-                    // TODO Make sure that invalid UTF-8 sequences are handled the exact same way as Files.columnIndex
                     try self.colors.setColor(self.writer, self.config.colors.source);
                     try self.writer.writeAll(buf);
                     try self.colors.setColor(self.writer, self.config.colors.reset);

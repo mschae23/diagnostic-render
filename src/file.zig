@@ -238,13 +238,11 @@ pub fn Files(comptime FileId: type) type {
         ///
         /// The return value is only `null` if no file with this ID exists. However, the underlying reader and seeker
         /// can error for any reason.
-        pub fn columnIndex(self: *Self, file_id: FileId, line_index: usize, byte_index: usize, index_mode: IndexMode, tab_length: usize) anyerror!?usize {
+        pub fn columnIndex(self: *Self, file_id: FileId, line_index: usize, byte_index: usize, tab_length: usize) anyerror!?usize {
             const opt_line_range = try self.lineRange(file_id, line_index);
 
             if (opt_line_range) |line_range| {
                 if (byte_index < line_range.start or byte_index > line_range.end) {
-                    return null;
-                } else if (index_mode == .inclusive and byte_index >= line_range.end) {
                     return null;
                 }
 
@@ -253,120 +251,146 @@ pub fn Files(comptime FileId: type) type {
                 if (opt_file_data) |file_data| {
                     try file_data.seeker.seekTo(line_range.start);
 
-                    var remaining_bytes = byte_index - line_range.start;
-                    var count: usize = 0;
+                    // UTF-8 decoding is implemented as specified in https://encoding.spec.whatwg.org/#utf-8-decoder.
+
+                    var result_column_index: usize = 0;
 
                     const dw = DisplayWidth { .data = &self.displaywidth_data };
-                    var gc_string = try std.ArrayListUnmanaged(u8).initCapacity(self.allocator, 1);
-                    defer gc_string.deinit(self.allocator);
-                    var cp_0: ?u21 = null;
-                    var cp_1: ?u21 = null;
                     var grapheme_state = grapheme.State {};
-                    var buf: [4]u8 = .{0} ** 4;
-                    var last_grapheme_break: bool = false;
+                    var grapheme_cluster = try std.ArrayListUnmanaged(u8).initCapacity(self.allocator, 1);
+                    defer grapheme_cluster.deinit(self.allocator);
 
-                    while (remaining_bytes > 0) {
-                        const codepoint = codepoint: {
-                            remaining_bytes -= 1;
-                            const byte = file_data.reader.readByte() catch |err| switch(err) {
-                                error.EndOfStream => {
+                    var last_codepoint: ?u21 = null;
+                    var post_increment_column_index = false;
+
+                    var codepoint: u21 = 0;
+                    var bytes_seen: u3 = 0;
+                    var bytes_needed: u3 = 0;
+                    var lower_boundary: u21 = 0x80;
+                    var upper_boundary: u21 = 0xBF;
+
+                    var i: usize = line_range.start;
+
+                    // Use <= to read the codepoint at byte_index as well
+                    while (i <= byte_index or bytes_needed != 0) {
+                        const current_codepoint = codepoint: {
+                            i += 1;
+                            const byte = file_data.reader.readByte() catch |err| switch (err) {
+                                error.EndOfStream => if (bytes_needed != 0) {
+                                    bytes_needed = 0;
+
+                                    break :codepoint std.unicode.replacement_character;
+                                } else {
+                                    post_increment_column_index = true;
                                     break;
                                 },
                                 else => return err,
                             };
-                            const codepoint_length = std.unicode.utf8ByteSequenceLength(byte) catch |err| switch (err) {
-                                error.Utf8InvalidStartByte => {
-                                    while (true) {
-                                        remaining_bytes -= 1;
-                                        const byte2 = file_data.reader.readByte() catch |err2| switch (err2) {
-                                            error.EndOfStream => {
-                                                break;
-                                            },
-                                            else => return err,
-                                        };
-                                        _ = std.unicode.utf8ByteSequenceLength(byte2) catch |err3| switch (err3) {
-                                            error.Utf8InvalidStartByte => continue,
-                                        };
-                                        break;
+
+                            if (bytes_needed == 0) {
+                                switch (byte) {
+                                    0x00...0x7F => {
+                                        break :codepoint byte;
+                                    },
+                                    0xC2...0xDF => {
+                                        bytes_needed = 1;
+                                        // The five least significant bits of byte.
+                                        codepoint = byte & 0x1F;
+                                    },
+                                    0xE0...0xEF  => {
+                                        if (byte == 0xE0) {
+                                            lower_boundary = 0xA0;
+                                        } else if (byte == 0xED) {
+                                            upper_boundary = 0x9F;
+                                        }
+
+                                        bytes_needed = 2;
+                                        // The four least significant bits of byte.
+                                        codepoint = byte & 0xF;
+                                    },
+                                    0xF0...0xF4 => {
+                                        if (byte == 0xF0) {
+                                            lower_boundary = 0x90;
+                                        } else if (byte == 0xF4) {
+                                            upper_boundary = 0x8F;
+                                        }
+
+                                        bytes_needed = 3;
+                                        // The three least significant bits of byte.
+                                        codepoint = byte & 0xF;
+                                    },
+                                    else => {
+                                        break :codepoint std.unicode.replacement_character;
                                     }
+                                }
 
-                                    break :codepoint std.unicode.replacement_character;
-                                },
-                            };
+                                continue;
+                            }
 
-                            buf[0] = byte;
-                            file_data.reader.readNoEof(buf[1 .. codepoint_length]) catch |err| switch (err) {
-                                error.EndOfStream => break,
-                                else => return err,
-                            };
+                            if (byte < lower_boundary or byte > upper_boundary) {
+                                codepoint = 0;
+                                bytes_needed = 0;
+                                bytes_seen = 0;
+                                lower_boundary = 0x80;
+                                upper_boundary = 0xBF;
+                                // "Restore byte to ioQueue", so that the byte will be read again in the next iteration
+                                try file_data.seeker.seekBy(-1);
 
-                            break :codepoint std.unicode.utf8Decode(buf[0..codepoint_length]) catch break :codepoint std.unicode.replacement_character;
+                                break :codepoint std.unicode.replacement_character;
+                            }
+
+                            lower_boundary = 0x80;
+                            upper_boundary = 0xBF;
+                            // Shift the existing bits of UTF-8 code point left by six places and set the newly-vacated
+                            // six least significant bits to the six least significant bits of byte.
+                            codepoint = (codepoint << 6) | (byte & 0x3F);
+                            bytes_seen += 1;
+
+                            if (bytes_seen != bytes_needed) {
+                                continue;
+                            }
+
+                            const cp = codepoint;
+                            codepoint = 0;
+                            bytes_needed = 0;
+                            bytes_seen = 0;
+                            break :codepoint cp;
                         };
 
-                        cp_0 = cp_1;
-                        cp_1 = codepoint;
-
-                        if (cp_0 == null) {
+                        if (last_codepoint == null) {
                             // First iteration
+                            last_codepoint = current_codepoint;
                             continue;
                         } else {
-                            _ = std.unicode.utf8Encode(cp_0.?, try gc_string.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(cp_0.?) catch unreachable)) catch unreachable;
+                            _ = std.unicode.utf8Encode(last_codepoint.?, try grapheme_cluster.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(last_codepoint.?) catch unreachable)) catch unreachable;
                         }
 
-                        const grapheme_break = grapheme.graphemeBreak(cp_0.?, cp_1.?, &self.grapheme_data, &grapheme_state);
-                        last_grapheme_break = grapheme_break;
+                        const grapheme_break = grapheme.graphemeBreak(last_codepoint.?, current_codepoint, &self.grapheme_data, &grapheme_state);
 
                         if (grapheme_break) {
-                            if (cp_0 == '\t') {
-                                count += tab_length;
+                            if (last_codepoint == '\t') {
+                                result_column_index += tab_length;
                             } else {
-                                count += dw.strWidth(gc_string.items);
+                                result_column_index += dw.strWidth(grapheme_cluster.items);
                             }
 
-                            gc_string.clearRetainingCapacity();
+                            grapheme_cluster.clearRetainingCapacity();
                         }
+
+                        last_codepoint = current_codepoint;
                     }
 
-                    if (last_grapheme_break) {
-                        if (index_mode == .inclusive) {
-                            if (cp_1.? == '\t') {
-                                count += tab_length;
-                            } else {
-                                _ = std.unicode.utf8Encode(cp_1.?, try gc_string.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(cp_1.?) catch unreachable)) catch unreachable;
-                                count += dw.strWidth(gc_string.items);
-                            }
+                    if (post_increment_column_index) {
+                        _ = std.unicode.utf8Encode(last_codepoint.?, try grapheme_cluster.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(last_codepoint.?) catch unreachable)) catch unreachable;
+
+                        if (last_codepoint == '\t') {
+                            result_column_index += tab_length;
                         } else {
-                            // Ignore next character if exclusive. There was a grapheme break between cp_0 and cp_1,
-                            // so there is definitely still a character after cp_0, which was the last one counted.
-                            // Since this is supposed to return an exclusive column index, increment count by one
-                            // to point to the next grapheme cluster.
-                            count += 1;
+                            result_column_index += dw.strWidth(grapheme_cluster.items);
                         }
                     }
 
-                    // Byte index points to cp_1 at this point. If there was no grapheme break here, cp_1 is still part of the
-                    // last grapheme cluster. That is not a valid byte index. In exclusive mode, this can be remedied by simply
-                    // not incrementing the count at this point; however, in inclusive mode, the grapheme cluster that it is pointing
-                    // into has not been counted yet when it technically should, but we cannot use dw.strWidth because the sequence of
-                    // codepoints is incomplete.
-                    //
-                    // Potential ways to deal with this:
-                    // 1. Simply increment count by one. Simple, but most likely wrong.
-                    // 2. Read until next grapheme cluster boundary. Could be undesirable.
-
-                    // TODO Rewrite this whole function. `byte_index` points to the first byte of the *next* character - the next
-                    // character should not be counted even in inclusive mode. Even if byte_index is invalid and points into the middle
-                    // of a UTF-8 codepoint or even the middle of a grapheme cluster, it doesn't matter. The last grapheme boundary is
-                    // all that counts. Exclusive mode is even simpler, the last grapheme boundary doesn't even count anymore.
-                    //
-                    // Steps to implement this properly:
-                    // 1. Read the characters normally until byte_index (the function already does this)
-                    // 2. Read the UTF-8 codepoint at byte_index to see whether there is a grapheme boundary at this index.
-                    //   - the function documentation requires there to be one. If there is one, count it.
-                    //   - if there isn't one, just don't count any codepoints since the last boundary, since this byte index is technically
-                    //     already referring to the *next* character.
-
-                    return count;
+                    return result_column_index;
                 } else {
                     return null;
                 }
@@ -398,7 +422,7 @@ pub fn Files(comptime FileId: type) type {
             if (opt_line_index) |line_index| {
                 return LineColumn {
                     .line_index = line_index,
-                    .column_index = try self.columnIndex(file_id, line_index, byte_index, index_mode, tab_length) orelse unreachable,
+                    .column_index = try self.columnIndex(file_id, line_index, byte_index, tab_length) orelse unreachable,
                 };
             } else {
                 return null;
@@ -418,7 +442,7 @@ pub fn Files(comptime FileId: type) type {
             if (opt_line_index) |line_index| {
                 return Location {
                     .line_number = self.lineNumber(file_id, line_index),
-                    .column_number = self.columnNumber(file_id, try self.columnIndex(file_id, line_index, byte_index, index_mode, tab_length) orelse unreachable),
+                    .column_number = self.columnNumber(file_id, try self.columnIndex(file_id, line_index, byte_index, tab_length) orelse unreachable),
                 };
             } else {
                 return null;
