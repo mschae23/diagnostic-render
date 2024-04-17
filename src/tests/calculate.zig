@@ -207,9 +207,9 @@ pub const vertical_offsets = struct {
             //   |  ___^   -
             //   | |  _____|
             // 2 | | | something += 3.0;
-            //   | | |     -        ^
-            //   | | |_____|________|
-            //   | |_______|        something
+            //   | | |_____-        ^
+            //   | |_______|________|
+            //   |         |        something
             //   |         something else
 
             try runTest(&.{
@@ -230,7 +230,7 @@ pub const vertical_offsets = struct {
                     }},
                 },
             }, &.{
-                VerticalOffset { .connection = 2, .label = 3, },
+                VerticalOffset { .connection = 0, .label = 3, },
                 VerticalOffset { .connection = 1, .label = 2, },
             });
         }

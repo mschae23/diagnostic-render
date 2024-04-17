@@ -167,52 +167,77 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
     //    | |____________|                       label 2
     //    |              label 3
     {
-        // TODO This is actually iterating in descending end byte index, not start (because starts_ends is sorted by the column index
-        //      the annotation is using on *this* line). Change this to actually iterate in descending start byte index order,
-        //      which may require allocating another list and filling it with starts_ends indices in the annotations' start byte
-        //      index order, which is then used for the actual iteration.
+        const EndingData = struct {
+            start_byte_index: usize,
+            annotation_index: usize,
+        };
 
-        var i: usize = starts_ends.len;
+        // Create a list of ending annotations sorted by start byte index (ascending).
+        var ending_annotation_indices = try std.ArrayListUnmanaged(EndingData).initCapacity(allocator, 0);
+        defer ending_annotation_indices.deinit(allocator);
+
+        var i: usize = 0;
+
+        while (i < starts_ends.len) : (i += 1) {
+            const start_end = starts_ends[i];
+
+            switch (start_end.data) {
+                .start => continue,
+                .end => try ending_annotation_indices.insert(allocator, std.sort.upperBound(EndingData, start_end.annotation.range.start, ending_annotation_indices.items, {}, struct {
+                    pub fn inner(_: void, a: usize, b: EndingData) bool {
+                        return a < b.start_byte_index;
+                    }
+                }.inner), EndingData { .start_byte_index = start_end.annotation.range.start, .annotation_index = i, }),
+                .both => continue,
+            }
+        }
+
+        // Iterate through the list of ending annotations in reverse to set the vertical_offset.connection values.
+        // That means this effectively iterates through the list of ending annotations in descending start byte index order.
+        i = ending_annotation_indices.items.len;
+
+        while (i > 0) {
+            i -= 1;
+
+            const ending_data = ending_annotation_indices.items[i];
+            const j = ending_data.annotation_index;
+            const start_end = starts_ends[j];
+            const annotation = start_end.annotation;
+            _ = annotation;
+
+            if (next_connection_offset == 0) {
+                if (j > 0) {
+                    // Special case: if there are any other annotations before this ending
+                    // annotation, use vertical offset 1 at minimum.
+                    next_connection_offset = 1;
+                }
+            }
+
+            vertical_offsets.items[j].connection = next_connection_offset;
+            next_connection_offset += 1;
+        }
+
+        // Iterate through ending annotations again, this time in descending end byte index order, to set
+        // the label offsets.
+        i = starts_ends.len;
 
         while (i > 0) {
             i -= 1;
 
             const start_end = starts_ends[i];
-            const annotation = start_end.annotation;
-            _ = annotation;
+            var vertical_offset = &vertical_offsets.items[i];
 
             switch (start_end.data) {
-                .start => |data| {
-                    _ = data;
-                },
-                .end => |data| {
-                    _ = data;
-
-                    if (next_connection_offset == 0) {
-                        // Special case for when this is the ending annotation for the rightmost continuing vertical bar,
-                        // but there is another annotation before it.
-                        // In this case, all vertical offsets need to be incremented by 1.
-
-                        if (i > 0) {
-                            // Another special case: if there are any other annotations before this ending
-                            // annotation, use vertical offset 1 at minimum.
-                            next_connection_offset = 1;
-                            next_label_offset = 2;
-                        }
-                    }
-
-                    vertical_offsets.items[i].connection = next_connection_offset;
-                    vertical_offsets.items[i].label = next_label_offset;
-                    next_connection_offset += 1;
-                    next_label_offset += 1;
+                .start => continue,
+                .end => {
+                    vertical_offset.label = @max(if (vertical_offset.connection == 0) 0 else vertical_offset.connection + 1, next_label_offset);
+                    next_label_offset = vertical_offset.label + 1;
 
                     if (next_label_offset == 1) {
                         next_label_offset = 2;
                     }
                 },
-                .both => |data| {
-                    _ = data;
-                },
+                .both => continue,
             }
         }
     }
@@ -456,7 +481,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
     continuing_annotations: []const *const Annotation(FileId)) anyerror!std.ArrayListUnmanaged(AnnotationData) {
     _ = tab_length;
 
-    std.debug.print("[debug] Vertical offsets: {any}\n", .{vertical_offsets});
+    // std.debug.print("[debug] Vertical offsets: {any}\n", .{vertical_offsets});
 
     var final_data = try std.ArrayListUnmanaged(AnnotationData).initCapacity(allocator, 0);
 
@@ -512,7 +537,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
             i = 0;
 
             while (i < additional_continuing_annotations.items.len) : (i += 1) {
-                const annotation = starts_ends[i].annotation;
+                const annotation = additional_continuing_annotations.items[i];
 
                 final_data.addOneAssumeCapacity().* = AnnotationData { .continuing_multiline = ContinuingMultilineAnnotationData {
                     .style = annotation.style,
@@ -585,6 +610,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                         .vertical_bar_index = (continuing_end_index + additional_continuing_annotations.items.len) - 1,
                     }};
 
+                    continuing_end_index -|= 1;
                     break;
                 }
             }
@@ -665,7 +691,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                 const start_end = starts_ends[i];
                 const vertical_offset = vertical_offsets[i];
 
-                if (vertical_offset.connection < current_vertical_offset or (vertical_offset.label != 0 and vertical_offset.label <= current_vertical_offset)) {
+                if (vertical_offset.connection < current_vertical_offset and vertical_offset.label <= current_vertical_offset) {
                     continue;
                 }
 

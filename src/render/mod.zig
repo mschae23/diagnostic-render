@@ -390,6 +390,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     //      The drawback is that, while it won't need the allocator anymore, this function will
                     //      have to stream the line from the reader to the writer byte for byte (because it has to
                     //      constantly decode and re-encode the UTF-8 data).
+                    // TODO Also handle tabs
 
                     const buf: []u8 = try allocator.alloc(u8, line_range.end - line_range.start);
                     defer allocator.free(buf);

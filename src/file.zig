@@ -252,7 +252,7 @@ pub fn Files(comptime FileId: type) type {
         ///
         /// The return value is only `null` if no file with this ID exists. However, the underlying reader and seeker
         /// can error for any reason.
-        pub fn columnIndex(self: *Self, file_id: FileId, line_index: usize, byte_index: usize, tab_length: usize) anyerror!?usize {
+        pub fn columnIndex(self: *Self, file_id: FileId, line_index: usize, byte_index: usize, index_mode: IndexMode, tab_length: usize) anyerror!?usize {
             const opt_line_range = try self.lineRange(file_id, line_index);
 
             if (opt_line_range) |line_range| {
@@ -410,7 +410,20 @@ pub fn Files(comptime FileId: type) type {
                         }
                     }
 
-                    return result_column_index;
+                    return switch (index_mode) {
+                        .inclusive => result_column_index,
+                        // In exclusive mode, the character referred to with byte_index is *not* part of some
+                        // range anymore. So the most useful return value of columnIndex in exclusive mode
+                        // is the number of columns to print in a fixed-width font such that the next character
+                        // ends at byte_index. For example, the end byte index of annotations is exclusive, and
+                        // this behaviour makes it easy to to print a character in the space of the last
+                        // character of the annotation's range.
+                        // This is why this subtracts 1 instead of the last character's width. If it did that
+                        // and this last character is more than one column wide, the renderer can no longer rely
+                        // on the behaviour described above. If it did, its annotations would get out of sync
+                        // with their source line.
+                        .exclusive => result_column_index - 1,
+                    };
                 } else {
                     return null;
                 }
@@ -442,7 +455,7 @@ pub fn Files(comptime FileId: type) type {
             if (opt_line_index) |line_index| {
                 return LineColumn {
                     .line_index = line_index,
-                    .column_index = try self.columnIndex(file_id, line_index, byte_index, tab_length) orelse unreachable,
+                    .column_index = try self.columnIndex(file_id, line_index, byte_index, index_mode, tab_length) orelse unreachable,
                 };
             } else {
                 return null;
@@ -462,7 +475,7 @@ pub fn Files(comptime FileId: type) type {
             if (opt_line_index) |line_index| {
                 return Location {
                     .line_number = self.lineNumber(file_id, line_index),
-                    .column_number = self.columnNumber(file_id, try self.columnIndex(file_id, line_index, byte_index, tab_length) orelse unreachable),
+                    .column_number = self.columnNumber(file_id, try self.columnIndex(file_id, line_index, byte_index, index_mode, tab_length) orelse unreachable),
                 };
             } else {
                 return null;
