@@ -399,6 +399,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     try self.colors.setColor(self.writer, self.config.colors.source);
                     try self.writer.writeAll(buf);
                     try self.colors.setColor(self.writer, self.config.colors.reset);
+                    try self.writer.writeByte('\n');
                 }
             }
         }

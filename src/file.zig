@@ -188,7 +188,7 @@ pub fn Files(comptime FileId: type) type {
                     }
                 }
 
-                return left -| 1;
+                return @min(left -| 1, line_starts.items.len - 2);
             } else {
                 return null;
             }
@@ -229,11 +229,16 @@ pub fn Files(comptime FileId: type) type {
             if (opt_line_starts) |line_starts| {
                 if (line_starts.items.len < line_index + 1) {
                     return null;
+                } else if (line_index == line_starts.items.len - 2) {
+                    return LineRange {
+                        .start = line_starts.items[line_index],
+                        .end = line_starts.items[line_index + 1], // no -1 because there's no LF byte
+                    };
                 }
 
                 return LineRange {
                     .start = line_starts.items[line_index],
-                    .end = line_starts.items[line_index + 1],
+                    .end = line_starts.items[line_index + 1] - 1, // -1 because of LF byte
                 };
             } else {
                 return null;

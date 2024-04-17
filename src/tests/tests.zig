@@ -25,20 +25,6 @@ const Span = diag.Span;
 const ColorConfig = @import("../ColorConfig.zig");
 const render = @import("../render/mod.zig");
 
-const calculate = @import("../render/calculate/mod.zig");
-const ContinuingMultilineAnnotationData = calculate.ContinuingMultilineAnnotationData;
-const ConnectingMultilineAnnotationData = calculate.ConnectingMultilineAnnotationData;
-const StartAnnotationData = calculate.StartAnnotationData;
-const ConnectingSinglelineAnnotationData = calculate.ConnectingSinglelineAnnotationData;
-const EndAnnotationData = calculate.EndAnnotationData;
-const HangingAnnotationData = calculate.HangingAnnotationData;
-const LabelAnnotationData = calculate.LabelAnnotationData;
-const BothAnnotationData = calculate.BothAnnotationData;
-const StartEndAnnotationData = calculate.StartEndAnnotationData;
-const AnnotationData = calculate.AnnotationData;
-const StartEnd = calculate.StartEnd(usize);
-const VerticalOffset = calculate.VerticalOffset;
-
 test "Development" {
     var fbs = std.io.fixedBufferStream(
         \\pub fn tést(&mut self, arg: i32) -> bool {
@@ -58,7 +44,7 @@ test "Development" {
 
     const diagnostics = .{
         diag.Diagnostic(usize).err().with_name("thing/test").with_message("Test").with_annotations(&.{
-            diag.Annotation(usize).primary(0, diag.Span.init(12, 44 + 35 + 2)).with_label("Annotation")
+            diag.Annotation(usize).primary(0, diag.Span.init(13, 45 + 35 + 1)).with_label("Annotation")
         })
     };
 
