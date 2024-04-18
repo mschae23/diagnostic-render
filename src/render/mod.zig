@@ -151,23 +151,23 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
         }
 
         fn renderDiagnosticHeader(self: *Self, diagnostic: *const Diagnostic(FileId)) anyerror!void {
-            try self.colors.setColor(self.writer, self.config.colors.getSeverity(diagnostic.severity));
+            try self.config.colors.writeSeverity(self.colors, self.writer, diagnostic.severity);
             try self.writer.print("{any}", .{diagnostic.severity});
 
             if (diagnostic.name) |name| {
                 try self.writer.writeByte('[');
-                try self.colors.setColor(self.writer, self.config.colors.getName(diagnostic.severity));
+                try self.config.colors.writeName(self.colors, self.writer, diagnostic.severity);
                 try self.writer.writeAll(name);
-                try self.colors.setColor(self.writer, self.config.colors.getSeverity(diagnostic.severity));
+                try self.config.colors.writeSeverity(self.colors, self.writer, diagnostic.severity);
                 try self.writer.writeByte(']');
             }
 
             if (diagnostic.message.len != 0) {
-                try self.colors.setColor(self.writer, self.config.colors.message);
+                try self.config.colors.writeMessage(self.colors, self.writer);
                 try self.writer.print(": {s}\n", .{diagnostic.message});
             }
 
-            try self.colors.setColor(self.writer, self.config.colors.reset);
+            try self.config.colors.writeReset(self.colors, self.writer);
 
             if (diagnostic.message.len == 0) {
                 try self.writer.writeByte('\n');
@@ -200,13 +200,14 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
             try self.writeLineNumber(null, .arrow);
             try self.writer.writeByte(' ');
-            try self.colors.setColor(self.writer, self.config.colors.path);
+            try self.config.colors.writePath(self.colors, self.writer);
             try self.writer.writeAll(self.files.name(file_id) orelse return error.FileNotFound);
 
+            // TODO Use a byte column number for this (which is probably what code editors interpret this to be)
             const user_location = try self.files.location(file_id, location, .inclusive, self.config.tab_length) orelse unreachable;
 
             try self.writer.print(":{d}:{d}\n", .{user_location.line_number, user_location.column_number});
-            try self.colors.setColor(self.writer, self.config.colors.reset);
+            try self.config.colors.writeReset(self.colors, self.writer);
 
             // Annotations list is already sorted by start byte index
 
@@ -375,9 +376,9 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             while (i < continuing_annotations.len) : (i += 1) {
                 const annotation = continuing_annotations[i];
 
-                try self.colors.setColor(self.writer, self.config.colors.getAnnotation(annotation.style, diagnostic.severity));
+                try self.config.colors.writeAnnotation(self.colors, self.writer, annotation.style, diagnostic.severity);
                 try self.writer.writeByte('|');
-                try self.colors.setColor(self.writer, self.config.colors.reset);
+                try self.config.colors.writeReset(self.colors, self.writer);
 
                 try self.writer.writeByte(' ');
             }
@@ -404,9 +405,9 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     defer allocator.free(buf);
                     try reader.readNoEof(buf);
 
-                    try self.colors.setColor(self.writer, self.config.colors.source);
+                    try self.config.colors.writeSource(self.colors, self.writer);
                     try self.writer.writeAll(buf);
-                    try self.colors.setColor(self.writer, self.config.colors.reset);
+                    try self.config.colors.writeReset(self.colors, self.writer);
                     try self.writer.writeByte('\n');
                 }
             }
@@ -457,9 +458,9 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                         std.debug.assert(pre_source);
 
                         try self.writer.writeByte(' ');
-                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
+                        try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
                         try self.writer.writeByte('|');
-                        try self.colors.setColor(self.writer, self.config.colors.reset);
+                        try self.config.colors.writeReset(self.colors, self.writer);
 
                         vertical_bar_index += 1;
                     },
@@ -477,14 +478,14 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                         };
 
                         // To get to column_index == 0
-                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
+                        try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
                         try self.writer.writeByte('_');
                         pre_source = false;
                     },
                     .start => |data| {
                         try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.location.column_index);
 
-                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
+                        try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
                         try self.writer.writeByte(switch (data.style) {
                             .primary => '^',
                             .secondary => '-',
@@ -503,7 +504,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     .end => |data| {
                         try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.location.column_index);
 
-                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
+                        try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
                         try self.writer.writeByte(switch (data.style) {
                             .primary => '^',
                             .secondary => '-',
@@ -513,14 +514,14 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     .hanging => |data| {
                         try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.location.column_index);
 
-                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
+                        try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
                         try self.writer.writeByte('|');
                         column_index += 1;
                     },
                     .label => |data| {
                         try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.location.column_index);
 
-                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
+                        try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
                         try self.writer.writeAll(data.label);
                         column_index += data.label.len;
                         last_label = true;
@@ -530,7 +531,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                             if (top.end_location.column_index <= column_index) {
                                 _ = connection_stack.pop();
                             } else {
-                                try self.colors.setColor(self.writer, self.config.colors.getAnnotation(top.style, top.severity));
+                                try self.config.colors.writeAnnotation(self.colors, self.writer, top.style, top.severity);
 
                                 try self.writer.writeByteNTimes(if (top.multiline) '_' else switch (top.style) {
                                     .primary => '^',
@@ -547,7 +548,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                         column_index = 0;
                         first = true;
                         last_label = false;
-                        try self.colors.setColor(self.writer, self.config.colors.reset);
+                        try self.config.colors.writeReset(self.colors, self.writer);
                         try self.writer.writeByte('\n');
                     },
                 }
@@ -580,9 +581,9 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
                 if (new) {
                     if (connection) |top| {
-                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(top.style, top.severity));
+                        try self.config.colors.writeAnnotation(self.colors, self.writer, top.style, top.severity);
                     } else {
-                        try self.colors.setColor(self.writer, self.config.colors.reset);
+                        try self.config.colors.writeReset(self.colors, self.writer);
                     }
 
                     new = false;
@@ -610,7 +611,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
         fn writeLineNumber(self: *Self, line: ?usize, separator: LineNumberSeparator) anyerror!void {
             if (line) |line2| {
-                try self.colors.setColor(self.writer, self.config.colors.line_number);
+                try self.config.colors.writeLineNumber(self.colors, self.writer);
                 try self.writer.print("{[number]:>[fill]}", .{ .number = line2, .fill = self.line_digits, });
             } else {
                 try self.writer.writeByteNTimes(' ', self.line_digits);
@@ -618,26 +619,26 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
             switch (separator) {
                 .arrow => {
-                    try self.colors.setColor(self.writer, self.config.colors.line_number_separator);
+                    try self.config.colors.writeLineNumberSeparator(self.colors, self.writer);
                     try self.writer.writeAll("-->");
-                    try self.colors.setColor(self.writer, self.config.colors.reset);
+                    try self.config.colors.writeReset(self.colors, self.writer);
                 },
                 .ellipsis => {
-                    try self.colors.setColor(self.writer, self.config.colors.line_number_separator);
+                    try self.config.colors.writeLineNumberSeparator(self.colors, self.writer);
                     try self.writer.writeAll("...");
-                    try self.colors.setColor(self.writer, self.config.colors.reset);
+                    try self.config.colors.writeReset(self.colors, self.writer);
                 },
                 .pipe => {
                     try self.writer.writeByte(' ');
-                    try self.colors.setColor(self.writer, self.config.colors.line_number_separator);
+                    try self.config.colors.writeLineNumberSeparator(self.colors, self.writer);
                     try self.writer.writeByte('|');
-                    try self.colors.setColor(self.writer, self.config.colors.reset);
+                    try self.config.colors.writeReset(self.colors, self.writer);
                 },
                 .end => {
                     try self.writer.writeByte(' ');
-                    try self.colors.setColor(self.writer, self.config.colors.line_number_separator);
+                    try self.config.colors.writeLineNumberSeparator(self.colors, self.writer);
                     try self.writer.writeByte('=');
-                    try self.colors.setColor(self.writer, self.config.colors.reset);
+                    try self.config.colors.writeReset(self.colors, self.writer);
                     try self.writer.writeByte(' ');
                 },
             }

@@ -18,6 +18,7 @@
 
 const std = @import("std");
 const Color = std.io.tty.Color;
+const Config = std.io.tty.Config;
 const diagnostic = @import("./diagnostic.zig");
 
 /// Resets all style and formatting.
@@ -132,24 +133,68 @@ pub const DEFAULT: Self = Self {
     },
 };
 
-pub fn getSeverity(self: Self, s: diagnostic.Severity) Color {
-    return self.severity[@intFromEnum(s)];
+pub fn writeReset(self: *const Self, config: Config, writer: anytype) anyerror!void {
+    return setColor(config, writer, self.reset);
 }
 
-pub fn getName(self: Self, s: diagnostic.Severity) Color {
-    return self.name[@intFromEnum(s)];
+pub fn writeSeverity(self: *const Self, config: Config, writer: anytype, s: diagnostic.Severity) anyerror!void {
+    return setColor(config, writer, self.severity[@intFromEnum(s)]);
 }
 
-pub fn getAnnotation(self: Self, style: diagnostic.AnnotationStyle, s: diagnostic.Severity) Color {
-    return self.annotation[countEnumCases(diagnostic.AnnotationStyle) * @as(usize, @intFromEnum(style)) + @as(usize, @intFromEnum(s))];
+pub fn writeName(self: *const Self, config: Config, writer: anytype, s: diagnostic.Severity) anyerror!void {
+    return setColor(config, writer, self.name[@intFromEnum(s)]);
 }
 
-pub fn getNoteSeverity(self: Self, s: diagnostic.Severity) Color {
-    return self.note_severity[@intFromEnum(s)];
+pub fn writeMessage(self: *const Self, config: Config, writer: anytype) anyerror!void {
+    return setColor(config, writer, self.message);
 }
 
-pub fn getNoteMessage(self: Self, s: diagnostic.Severity) Color {
-    return self.note_message[@intFromEnum(s)];
+pub fn writePath(self: *const Self, config: Config, writer: anytype) anyerror!void {
+    return setColor(config, writer, self.path);
+}
+
+pub fn writeLineNumber(self: *const Self, config: Config, writer: anytype) anyerror!void {
+    return setColor(config, writer, self.line_number);
+}
+
+pub fn writeLineNumberSeparator(self: *const Self, config: Config, writer: anytype) anyerror!void {
+    return setColor(config, writer, self.line_number_separator);
+}
+
+pub fn writeAnnotation(self: *const Self, config: Config, writer: anytype, style: diagnostic.AnnotationStyle, s: diagnostic.Severity) anyerror!void {
+    return setColor(config, writer, self.annotation[countEnumCases(diagnostic.AnnotationStyle) * @as(usize, @intFromEnum(style)) + @as(usize, @intFromEnum(s))]);
+}
+
+pub fn writeSource(self: *const Self, config: Config, writer: anytype) anyerror!void {
+    return setColor(config, writer, self.source);
+}
+
+pub fn writeNoteSeverity(self: *const Self, config: Config, writer: anytype, s: diagnostic.Severity) anyerror!void {
+    return setColor(config, writer, self.note_severity[@intFromEnum(s)]);
+}
+
+pub fn writeNoteMessage(self: *const Self, config: Config, writer: anytype, s: diagnostic.Severity) anyerror!void {
+    return setColor(config, writer, self.note_message[@intFromEnum(s)]);
+}
+
+pub fn setColor(config: Config, writer: anytype, color: Color) anyerror!void {
+    bright: {
+        const original: Color = switch (color) {
+            .bright_black => .black,
+            .bright_red => .red,
+            .bright_green => .green,
+            .bright_yellow => .yellow,
+            .bright_blue => .blue,
+            .bright_magenta => .magenta,
+            .bright_cyan => .cyan,
+            else => break :bright,
+        };
+
+        try config.setColor(writer, .bold);
+        return config.setColor(writer, original);
+    }
+
+    return config.setColor(writer, color);
 }
 
 fn countEnumCases(comptime T: type) comptime_int {
