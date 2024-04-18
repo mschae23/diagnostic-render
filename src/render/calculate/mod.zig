@@ -230,6 +230,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
             switch (start_end.data) {
                 .start => continue,
                 .end => {
+                    // TODO Check whether the annotation has a label at all
                     vertical_offset.label = @max(if (vertical_offset.connection == 0) 0 else vertical_offset.connection + 1, next_label_offset);
                     next_label_offset = vertical_offset.label + 1;
 
@@ -297,6 +298,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                     vertical_offsets.items[i].connection = next_connection_offset;
                     vertical_offsets.items[i].label = 0;
                     next_connection_offset += 1;
+                    // TODO Check whether this is correct (maybe use @max(vertical_offset.connection + 1, next_label_offset) like above?)
                     next_label_offset += 1;
 
                     if (next_label_offset == 1) {
@@ -408,6 +410,8 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                 },
                 .end => |data| {
                     _ = data;
+
+                    // TODO Check whether the annotation even has a label at all
 
                     if (ending_label_offset != 0 and vertical_offsets.items[i].label == 0) {
                         vertical_offsets.items[i].label = ending_label_offset + 1;
@@ -736,17 +740,17 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                 switch (start_end.data) {
                     .start => continue,
                     .end => |data| (try final_data.addOne(allocator)).* =
-                        AnnotationData { .label = LabelAnnotationData {
+                        AnnotationData { .label = .{
                             .style = start_end.annotation.style,
                             .severity = diagnostic.severity,
-                            .location = data.location,
+                            .location = if (vertical_offset.label == 0) LineColumn.init(data.location.line_index, data.location.column_index + 2) else data.location,
                             .label = start_end.annotation.label,
                         }},
                     .both => |data| (try final_data.addOne(allocator)).* =
-                        AnnotationData { .label = LabelAnnotationData {
+                        AnnotationData { .label = .{
                             .style = start_end.annotation.style,
                             .severity = diagnostic.severity,
-                            .location = data.start.location,
+                            .location = if (vertical_offset.label == 0) LineColumn.init(data.end.location.line_index, data.end.location.column_index + 2) else data.start.location,
                             .label = start_end.annotation.label,
                         }},
                 }

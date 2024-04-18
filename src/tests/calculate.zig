@@ -431,7 +431,7 @@ pub const final = struct {
                 AnnotationData { .label = .{
                     .style = annotation.style,
                     .severity = diagnostic.severity,
-                    .location = LineColumn.init(0, 5),
+                    .location = LineColumn.init(0, 10),
                     .label = "test label",
                 }},
                 AnnotationData.newline,
@@ -474,7 +474,7 @@ pub const final = struct {
                 AnnotationData { .label = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
-                    .location = LineColumn.init(0, 3),
+                    .location = LineColumn.init(0, 14),
                     .label = "expected type annotation here",
                 }},
                 AnnotationData.newline,
@@ -499,7 +499,7 @@ pub const final = struct {
                 AnnotationData { .label = .{
                     .style = annotation2.style,
                     .severity = diagnostic.severity,
-                    .location = LineColumn.init(1, 13),
+                    .location = LineColumn.init(1, 17),
                     .label = "due to this",
                 }},
                 AnnotationData.newline,
@@ -558,7 +558,7 @@ pub const final = struct {
                 AnnotationData { .label = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
-                    .location = LineColumn.init(0, 11),
+                    .location = LineColumn.init(0, 14),
                     .label = "number",
                 }},
                 AnnotationData.newline,
@@ -713,7 +713,7 @@ pub const final = struct {
                 AnnotationData { .label = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
-                    .location = LineColumn.init(1, 3),
+                    .location = LineColumn.init(1, 5),
                     .label = "something",
                 }},
                 AnnotationData.newline,
@@ -1037,7 +1037,7 @@ pub const final = struct {
                 AnnotationData { .label = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
-                    .location = LineColumn.init(1, 13),
+                    .location = LineColumn.init(1, 15),
                     .label = "something",
                 }},
                 AnnotationData.newline,
@@ -1147,7 +1147,7 @@ pub const final = struct {
                 AnnotationData { .label = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
-                    .location = LineColumn.init(1, 13),
+                    .location = LineColumn.init(1, 15),
                     .label = "something",
                 }},
                 AnnotationData.newline,
@@ -1273,7 +1273,7 @@ pub const final = struct {
                 AnnotationData { .label = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
-                    .location = LineColumn.init(2, 4),
+                    .location = LineColumn.init(2, 6),
                     .label = "something",
                 }},
                 AnnotationData.newline,

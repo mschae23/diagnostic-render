@@ -409,6 +409,15 @@ pub fn Files(comptime FileId: type) type {
                         _ = std.unicode.utf8Encode(last_codepoint.?, try grapheme_cluster.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(last_codepoint.?) catch unreachable)) catch unreachable;
 
                         if (last_codepoint == '\t') {
+                            // TODO Implement tab support properly. This line is based on the wrong assumption
+                            //      that every tab requires the same number of columns to display - this is
+                            //      obviously wrong. Instead, its width is the number of characters until the
+                            //      next tab stop, so 1..<tab_length.
+                            //      It's still unclear to me whether it's "every n grapheme cluster" or if it's
+                            //      based on codepoints or even bytes instead (but that wouldn't make sense).
+                            //
+                            //      Another alternative is "elastic tabstops": https://nick-gravgaard.com/elastic-tabstops/,
+                            //      but it seems to be rarely used.
                             result_column_index += tab_length;
                         } else {
                             result_column_index += dw.strWidth(grapheme_cluster.items);

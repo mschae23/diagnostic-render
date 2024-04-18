@@ -360,6 +360,10 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
             try self.writeLineNumber(line_number, separator);
 
+            if (separator == .pipe or separator == .end) {
+                try self.writer.writeByte(' ');
+            }
+
             var i: usize = 0;
 
             while (i < continuing_annotations.len) : (i += 1) {
@@ -369,9 +373,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 try self.writer.writeByte('|');
                 try self.colors.setColor(self.writer, self.config.colors.reset);
 
-                if (i < continuing_annotations.len - 1) {
-                    try self.writer.writeByte(' ');
-                }
+                try self.writer.writeByte(' ');
             }
 
             if (line_index) |line| {
@@ -380,7 +382,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 const line_range = try self.files.lineRange(file_id, line) orelse unreachable;
 
                 if (line_range.end != line_range.start) {
-                    try self.writer.writeByteNTimes(' ', @max(2 * self.max_nested_blocks - (2 * continuing_annotations.len) -| 1, 1));
+                    try self.writer.writeByteNTimes(' ', 2 * (self.max_nested_blocks - continuing_annotations.len));
 
                     try seeker.seekTo(@as(u64, line_range.start));
 
@@ -407,7 +409,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
         fn renderLine(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, main_line_index: usize, continuing_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId)), active_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {
             try self.writeSourceLine(allocator, diagnostic, file_id, line_index, .pipe, continuing_annotations.items);
 
-            if (line_index != main_line_index) {
+            if (line_index != main_line_index or active_annotations.items.len == 0) {
                 return;
             }
 
@@ -418,9 +420,174 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             var annotation_data = try calculate.calculate(FileId, allocator, diagnostic, &self.files, file_id, line_index, self.config.tab_length, continuing_annotations.items, active_annotations.items);
             defer annotation_data.deinit(allocator);
 
+            const ConnectingData = struct {
+                style: diag.AnnotationStyle,
+                severity: diag.Severity,
+                multiline: bool,
+                end_location: LineColumn,
+            };
+
+            var connection_stack = try std.ArrayListUnmanaged(ConnectingData).initCapacity(allocator, 0);
+            defer connection_stack.deinit(allocator);
+
+            var vertical_bar_index: usize = 0;
+            var pre_source = true;
+            var column_index: usize = 0;
+            var first = true;
+            var last_label = false;
+
             for (annotation_data.items) |item| {
-                try self.writer.writeAll("[debug] ");
-                try self.writer.print("{any}\n", .{item});
+                if (first) {
+                    try self.writeLineNumber(null, .pipe);
+                    first = false;
+                }
+
+                if (last_label and item != .newline) {
+                    unreachable;
+                }
+
+                switch (item) {
+                    .continuing_multiline => |data| {
+                        std.debug.assert(pre_source);
+
+                        try self.writer.writeByte(' ');
+                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
+                        try self.writer.writeByte('|');
+                        try self.colors.setColor(self.writer, self.config.colors.reset);
+
+                        vertical_bar_index += 1;
+                    },
+                    .connecting_multiline => |data| {
+                        std.debug.assert(pre_source);
+
+                        if (vertical_bar_index < data.vertical_bar_index + 1) {
+                            try self.writer.writeByteNTimes(' ', 2 * (1 + data.vertical_bar_index - vertical_bar_index));
+                        }
+
+                        (try connection_stack.addOne(allocator)).* = ConnectingData {
+                            .style = data.style, .severity = data.severity,
+                            .multiline = true,
+                            .end_location = data.end_location,
+                        };
+
+                        // To get to column_index == 0
+                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
+                        try self.writer.writeByte('_');
+                        pre_source = false;
+                    },
+                    .start => |data| {
+                        try self.writeConnectionUpTo(ConnectingData, &pre_source, &column_index, &connection_stack, data.location.column_index);
+
+                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
+                        try self.writer.writeByte(switch (data.style) {
+                            .primary => '^',
+                            .secondary => '-',
+                        });
+                        column_index += 1;
+                    },
+                    .connecting_singleline => |data| {
+                        try self.writeConnectionUpTo(ConnectingData, &pre_source, &column_index, &connection_stack, data.start_column_index);
+
+                        (try connection_stack.addOne(allocator)).* = ConnectingData {
+                            .style = data.style, .severity = data.severity,
+                            .multiline = data.as_multiline,
+                            .end_location = LineColumn.init(data.line_index, data.end_column_index),
+                        };
+                    },
+                    .end => |data| {
+                        try self.writeConnectionUpTo(ConnectingData, &pre_source, &column_index, &connection_stack, data.location.column_index);
+
+                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
+                        try self.writer.writeByte(switch (data.style) {
+                            .primary => '^',
+                            .secondary => '-',
+                        });
+                        column_index += 1;
+                    },
+                    .hanging => |data| {
+                        try self.writeConnectionUpTo(ConnectingData, &pre_source, &column_index, &connection_stack, data.location.column_index);
+
+                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
+                        try self.writer.writeByte('|');
+                        column_index += 1;
+                    },
+                    .label => |data| {
+                        try self.writeConnectionUpTo(ConnectingData, &pre_source, &column_index, &connection_stack, data.location.column_index);
+
+                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
+                        try self.writer.writeAll(data.label);
+                        column_index += data.label.len;
+                        last_label = true;
+                    },
+                    .newline => {
+                        while (connection_stack.getLastOrNull()) |top| {
+                            if (top.end_location.column_index <= column_index) {
+                                _ = connection_stack.pop();
+                            } else {
+                                try self.colors.setColor(self.writer, self.config.colors.getAnnotation(top.style, top.severity));
+
+                                try self.writer.writeByteNTimes(if (top.multiline) '_' else switch (top.style) {
+                                    .primary => '^',
+                                    .secondary => '-',
+                                }, top.end_location.column_index - column_index);
+                                column_index += top.end_location.column_index - column_index;
+
+                                _ = connection_stack.pop();
+                            }
+                        }
+
+                        vertical_bar_index = 0;
+                        pre_source = true;
+                        column_index = 0;
+                        first = true;
+                        last_label = false;
+                        try self.colors.setColor(self.writer, self.config.colors.reset);
+                        try self.writer.writeByte('\n');
+                    },
+                }
+            }
+        }
+
+        fn writeConnectionUpTo(self: *Self, comptime ConnectingData: type, pre_source: *bool, column_index: *usize, connection_stack: *std.ArrayListUnmanaged(ConnectingData), end_column_index: usize) anyerror!void {
+            if (pre_source.*) {
+                try self.writer.writeByte(' ');
+                pre_source.* = false;
+            }
+
+            while (column_index.* < end_column_index) {
+                var connection: ?ConnectingData = connection_stack.getLastOrNull();
+                var new = true;
+
+                while (connection) |top| {
+                    if (top.end_location.column_index <= column_index.*) {
+                        _ = connection_stack.pop();
+                        connection = connection_stack.getLastOrNull();
+                        new = true;
+                    } else {
+                        break;
+                    }
+                }
+
+                if (new) {
+                    if (connection) |top| {
+                        try self.colors.setColor(self.writer, self.config.colors.getAnnotation(top.style, top.severity));
+                    } else {
+                        try self.colors.setColor(self.writer, self.config.colors.reset);
+                    }
+
+                    new = false;
+                }
+
+                if (connection) |top| {
+                    try self.writer.writeByte(if (top.multiline) '_' else switch (top.style) {
+                        .primary => '^',
+                        .secondary => '-',
+                    });
+                } else {
+                    try self.writer.writeByte(' ');
+                }
+
+                column_index.* += 1;
             }
         }
 
