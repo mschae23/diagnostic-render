@@ -162,7 +162,7 @@ pub fn writeLineNumberSeparator(self: *const Self, config: Config, writer: anyty
 }
 
 pub fn writeAnnotation(self: *const Self, config: Config, writer: anytype, style: diagnostic.AnnotationStyle, s: diagnostic.Severity) anyerror!void {
-    return setColor(config, writer, self.annotation[countEnumCases(diagnostic.AnnotationStyle) * @as(usize, @intFromEnum(style)) + @as(usize, @intFromEnum(s))]);
+    return setColor(config, writer, self.annotation[countEnumCases(diagnostic.Severity) * @as(usize, @intFromEnum(style)) + @as(usize, @intFromEnum(s))]);
 }
 
 pub fn writeSource(self: *const Self, config: Config, writer: anytype) anyerror!void {
@@ -180,13 +180,8 @@ pub fn writeNoteMessage(self: *const Self, config: Config, writer: anytype, s: d
 pub fn setColor(config: Config, writer: anytype, color: Color) anyerror!void {
     bright: {
         const original: Color = switch (color) {
-            .bright_black => .black,
             .bright_red => .red,
-            .bright_green => .green,
-            .bright_yellow => .yellow,
-            .bright_blue => .blue,
-            .bright_magenta => .magenta,
-            .bright_cyan => .cyan,
+            .bright_blue => .bright_blue,
             else => break :bright,
         };
 

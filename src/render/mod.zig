@@ -163,8 +163,12 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             }
 
             if (diagnostic.message.len != 0) {
+                try self.config.colors.writeReset(self.colors, self.writer);
+                try self.writer.writeAll(": ");
                 try self.config.colors.writeMessage(self.colors, self.writer);
-                try self.writer.print(": {s}\n", .{diagnostic.message});
+                try self.writer.writeAll(diagnostic.message);
+                try self.config.colors.writeReset(self.colors, self.writer);
+                try self.writer.writeByte('\n');
             }
 
             try self.config.colors.writeReset(self.colors, self.writer);
@@ -303,8 +307,10 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     (try active_annotations.addOne(allocator)).* = annotation;
                 }
 
-                try self.renderPartLines(allocator, diagnostic, file_id, current_line_index, last_line_index,
-                    continuing_annotations, active_annotations, &already_printed_end_line_index);
+                if (active_annotations.items.len != 0) {
+                    try self.renderPartLines(allocator, diagnostic, file_id, current_line_index, last_line_index,
+                        continuing_annotations, active_annotations, &already_printed_end_line_index);
+                }
 
                 last_line_index = current_line_index;
             }
@@ -321,7 +327,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
             if (last_line + 1 >= already_printed_end_line_index.*) {
                 const first_print_line = @max(last_line + 1, already_printed_end_line_index.*);
-                const last_print_line = @min(try self.files.getLastLineIndex(file_id) orelse unreachable, main_line - 1);
+                const last_print_line = @min(last_line + self.config.surrounding_lines, main_line - 1);
 
                 // self.debug.print("[debug] printing post surrounding lines, last line: {}, first: {}, last: {}", .{last_line, first_print_line, last_print_line})?;
 
@@ -408,9 +414,10 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     try self.config.colors.writeSource(self.colors, self.writer);
                     try self.writer.writeAll(buf);
                     try self.config.colors.writeReset(self.colors, self.writer);
-                    try self.writer.writeByte('\n');
                 }
             }
+
+            try self.writer.writeByte('\n');
         }
 
         fn renderLine(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, main_line_index: usize, continuing_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId)), active_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {

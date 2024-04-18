@@ -46,6 +46,10 @@ test "Development" {
         diag.Diagnostic(usize).err().with_name("thing/test").with_message("Test").with_annotations(&.{
             diag.Annotation(usize).primary(0, diag.Span.init(43, 45 + 35 + 1)).with_label("label 1"),
             diag.Annotation(usize).secondary(0, diag.Span.init(4, 33)).with_label("label 2")
+        }),
+        diag.Diagnostic(usize).err().with_name("thing/test2").with_message("Test 2").with_annotations(&.{
+            diag.Annotation(usize).primary(0, diag.Span.init(7, 13)).with_label("label 1"),
+            diag.Annotation(usize).secondary(0, diag.Span.init(38, 42)).with_label("label 2")
         })
     };
 
