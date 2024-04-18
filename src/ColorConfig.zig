@@ -141,7 +141,7 @@ pub fn getName(self: Self, s: diagnostic.Severity) Color {
 }
 
 pub fn getAnnotation(self: Self, style: diagnostic.AnnotationStyle, s: diagnostic.Severity) Color {
-    return self.name[countEnumCases(diagnostic.AnnotationStyle) * @as(usize, @intFromEnum(style)) + @as(usize, @intFromEnum(s))];
+    return self.annotation[countEnumCases(diagnostic.AnnotationStyle) * @as(usize, @intFromEnum(style)) + @as(usize, @intFromEnum(s))];
 }
 
 pub fn getNoteSeverity(self: Self, s: diagnostic.Severity) Color {

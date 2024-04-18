@@ -295,6 +295,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                         next_label_offset = 2;
                     }
 
+                    first = false;
                     vertical_offsets.items[i].connection = next_connection_offset;
                     vertical_offsets.items[i].label = 0;
                     next_connection_offset += 1;
@@ -463,8 +464,44 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                         }
                     }
 
+                    if (i == starts_ends.len - 1) {
+                        var last = true;
+                        var j: usize = 0;
+
+                        while (j < starts_ends.len) : (j += 1) {
+                            if (i == j) {
+                                continue;
+                            }
+
+                            switch (starts_ends[j].data) {
+                                .start => |data2| if (data2.location.column_index >= data.start.location.column_index) {
+                                    last = false;
+                                    break;
+                                },
+                                .end => |data2| if (data2.location.column_index >= data.start.location.column_index) {
+                                    last = false;
+                                    break;
+                                },
+                                .both => |data2| if (data2.end.location.column_index >= data.start.location.column_index) {
+                                    last = false;
+                                    break;
+                                },
+                            }
+                        }
+
+                        if (last) {
+                            vertical_offsets.items[i].connection = 0;
+                            vertical_offsets.items[i].label = 0;
+
+                            next_connection_offset = @max(next_connection_offset, 1);
+                            next_label_offset = @max(next_label_offset, 2);
+                            continue;
+                        }
+                    }
+
                     vertical_offsets.items[i].connection = next_connection_offset;
                     vertical_offsets.items[i].label = next_label_offset;
+
                     next_connection_offset += 1;
                     next_label_offset += 1;
 

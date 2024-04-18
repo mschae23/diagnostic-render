@@ -253,18 +253,20 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             var last_line_index: ?usize = null;
             var already_printed_end_line_index: usize = 0;
 
-            const last_line_index_to_process = try self.files.lineIndex(file_id, annotations.getLast().range.end, .exclusive) orelse unreachable;
+            const last_line_index_in_file = try self.files.getLastLineIndex(file_id) orelse unreachable;
+            var should_continue = true;
 
             var line_allocator = std.heap.ArenaAllocator.init(diagnostic_allocator);
             defer line_allocator.deinit();
             const allocator = line_allocator.allocator();
 
-            while (true) : (current_line_index += 1) {
-                if (current_line_index > last_line_index_to_process) {
+            while (should_continue) : (current_line_index += 1) {
+                if (current_line_index > last_line_index_in_file) {
                     break;
                 }
 
                 defer _ = line_allocator.reset(.retain_capacity);
+                should_continue = false;
 
                 var continuing_annotations = try std.ArrayListUnmanaged(*const Annotation(FileId)).initCapacity(allocator, 0);
                 defer continuing_annotations.deinit(allocator);
@@ -279,9 +281,11 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     const end_line_index = try self.files.lineIndex(file_id, annotation.range.end, .exclusive) orelse unreachable;
 
                     if (start_line_index > current_line_index) {
+                        should_continue = true;
                         break;
                     } else if (start_line_index < current_line_index and end_line_index > current_line_index) {
                         (try continuing_annotations.addOne(allocator)).* = annotation;
+                        should_continue = true;
                         continue;
                     } else if (start_line_index != current_line_index and end_line_index != current_line_index) {
                         continue;
@@ -291,18 +295,20 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                         (try continuing_annotations.addOne(allocator)).* = annotation;
                     }
 
+                    if (end_line_index > current_line_index) {
+                        should_continue = true;
+                    }
+
                     (try active_annotations.addOne(allocator)).* = annotation;
                 }
 
                 try self.renderPartLines(allocator, diagnostic, file_id, current_line_index, last_line_index,
                     continuing_annotations, active_annotations, &already_printed_end_line_index);
 
-                    last_line_index = current_line_index;
+                last_line_index = current_line_index;
             }
 
             if (last_line_index) |last_line| {
-                const last_line_index_in_file = try self.files.getLastLineIndex(file_id) orelse unreachable;
-
                 if (last_line <= last_line_index_in_file) {
                     try self.renderPostSurroundingLines(diagnostic_allocator, diagnostic, file_id, last_line_index_in_file + 1, last_line, &.{}, &already_printed_end_line_index);
                 }
@@ -476,7 +482,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                         pre_source = false;
                     },
                     .start => |data| {
-                        try self.writeConnectionUpTo(ConnectingData, &pre_source, &column_index, &connection_stack, data.location.column_index);
+                        try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.location.column_index);
 
                         try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
                         try self.writer.writeByte(switch (data.style) {
@@ -486,7 +492,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                         column_index += 1;
                     },
                     .connecting_singleline => |data| {
-                        try self.writeConnectionUpTo(ConnectingData, &pre_source, &column_index, &connection_stack, data.start_column_index);
+                        try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.start_column_index);
 
                         (try connection_stack.addOne(allocator)).* = ConnectingData {
                             .style = data.style, .severity = data.severity,
@@ -495,7 +501,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                         };
                     },
                     .end => |data| {
-                        try self.writeConnectionUpTo(ConnectingData, &pre_source, &column_index, &connection_stack, data.location.column_index);
+                        try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.location.column_index);
 
                         try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
                         try self.writer.writeByte(switch (data.style) {
@@ -505,14 +511,14 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                         column_index += 1;
                     },
                     .hanging => |data| {
-                        try self.writeConnectionUpTo(ConnectingData, &pre_source, &column_index, &connection_stack, data.location.column_index);
+                        try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.location.column_index);
 
                         try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
                         try self.writer.writeByte('|');
                         column_index += 1;
                     },
                     .label => |data| {
-                        try self.writeConnectionUpTo(ConnectingData, &pre_source, &column_index, &connection_stack, data.location.column_index);
+                        try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.location.column_index);
 
                         try self.colors.setColor(self.writer, self.config.colors.getAnnotation(data.style, data.severity));
                         try self.writer.writeAll(data.label);
@@ -548,8 +554,12 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             }
         }
 
-        fn writeConnectionUpTo(self: *Self, comptime ConnectingData: type, pre_source: *bool, column_index: *usize, connection_stack: *std.ArrayListUnmanaged(ConnectingData), end_column_index: usize) anyerror!void {
+        fn writeConnectionUpTo(self: *Self, comptime ConnectingData: type, vertical_bar_index: usize, pre_source: *bool, column_index: *usize, connection_stack: *std.ArrayListUnmanaged(ConnectingData), end_column_index: usize) anyerror!void {
             if (pre_source.*) {
+                if (vertical_bar_index < self.max_nested_blocks) {
+                    try self.writer.writeByteNTimes(' ', 2 * (self.max_nested_blocks - vertical_bar_index));
+                }
+
                 try self.writer.writeByte(' ');
                 pre_source.* = false;
             }
