@@ -62,11 +62,11 @@ const Self = @This();
 
 pub const DEFAULT_SEVERITY: [countEnumCases(diagnostic.Severity)] Color = .{
     // Help
-    Color.green,
+    Color.bright_green,
     // Note
     Color.bright_blue,
     // Warning
-    Color.yellow,
+    Color.bright_yellow,
     // Error
     Color.bright_red,
     // Bug
@@ -84,11 +84,11 @@ pub const DEFAULT: Self = Self {
     .annotation = .{
         // == Primary ==
         // Help
-        Color.green,
+        Color.bright_green,
         // Note
         Color.bright_blue,
         // Warning
-        Color.yellow,
+        Color.bright_yellow,
         // Error
         Color.bright_red,
         // Bug
@@ -180,8 +180,13 @@ pub fn writeNoteMessage(self: *const Self, config: Config, writer: anytype, s: d
 pub fn setColor(config: Config, writer: anytype, color: Color) anyerror!void {
     bright: {
         const original: Color = switch (color) {
+            .bright_black => .bright_black,
             .bright_red => .red,
+            .bright_green => .green,
+            .bright_yellow => .yellow,
             .bright_blue => .bright_blue,
+            .bright_magenta => .magenta,
+            .bright_cyan => .cyan,
             else => break :bright,
         };
 

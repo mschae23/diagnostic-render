@@ -207,8 +207,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             try self.config.colors.writePath(self.colors, self.writer);
             try self.writer.writeAll(self.files.name(file_id) orelse return error.FileNotFound);
 
-            // TODO Use a byte column number for this (which is probably what code editors interpret this to be)
-            const user_location = try self.files.location(file_id, location, .inclusive, self.config.tab_length) orelse unreachable;
+            const user_location = try self.files.codepointLocation(file_id, location) orelse unreachable;
 
             try self.writer.print(":{d}:{d}\n", .{user_location.line_number, user_location.column_number});
             try self.config.colors.writeReset(self.colors, self.writer);

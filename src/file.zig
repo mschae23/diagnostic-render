@@ -409,16 +409,9 @@ pub fn Files(comptime FileId: type) type {
                         _ = std.unicode.utf8Encode(last_codepoint.?, try grapheme_cluster.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(last_codepoint.?) catch unreachable)) catch unreachable;
 
                         if (last_codepoint == '\t') {
-                            // TODO Implement tab support properly. This line is based on the wrong assumption
-                            //      that every tab requires the same number of columns to display - this is
-                            //      obviously wrong. Instead, its width is the number of characters until the
-                            //      next tab stop, so 1..<tab_length.
-                            //      It's still unclear to me whether it's "every n grapheme cluster" or if it's
-                            //      based on codepoints or even bytes instead (but that wouldn't make sense).
-                            //
-                            //      Another alternative is "elastic tabstops": https://nick-gravgaard.com/elastic-tabstops/,
-                            //      but it seems to be rarely used.
-                            result_column_index += tab_length;
+                            // An alternative to this approach is "elastic tabstops": https://nick-gravgaard.com/elastic-tabstops/,
+                            // but it seems to be rarely used.
+                            result_column_index += tab_length - (result_column_index % tab_length);
                         } else {
                             result_column_index += dw.strWidth(grapheme_cluster.items);
                         }
@@ -490,6 +483,139 @@ pub fn Files(comptime FileId: type) type {
                 return Location {
                     .line_number = self.lineNumber(file_id, line_index),
                     .column_number = self.columnNumber(file_id, try self.columnIndex(file_id, line_index, byte_index, index_mode, tab_length) orelse unreachable),
+                };
+            } else {
+                return null;
+            }
+        }
+
+        /// Returns both a user-facing [line] and a byte-based column number for a given character in a file.
+        ///
+        /// The return value is only `null` if no file with this ID exists. However, the underlying reader and seeker
+        /// can error for any reason.
+        ///
+        /// [line]: lineNumber
+        pub fn codepointLocation(self: *Self, file_id: FileId, byte_index: usize) anyerror!?Location {
+            const opt_line_index = try self.lineIndex(file_id, byte_index, .inclusive);
+
+            if (opt_line_index) |line_index| {
+                const line_range = try self.lineRange(file_id, line_index) orelse unreachable;
+
+                const byte_index_2 =
+                    if (byte_index < line_range.start)
+                        line_range.start
+                    else if (byte_index > line_range.end)
+                        line_range.end
+                    else byte_index;
+
+                const column_index = column: {
+                    const file_data = self.files.get(file_id) orelse unreachable;
+                    try file_data.seeker.seekTo(line_range.start);
+
+                    var codepoint_column_index: usize = 0;
+
+                    var codepoint: u21 = 0;
+                    var bytes_seen: u3 = 0;
+                    var bytes_needed: u3 = 0;
+                    var lower_boundary: u21 = 0x80;
+                    var upper_boundary: u21 = 0xBF;
+
+                    var i: usize = line_range.start;
+
+                    while (i < byte_index_2 or bytes_needed != 0) {
+                        const current_codepoint = codepoint: {
+                            i += 1;
+                            const byte = file_data.reader.readByte() catch |err| switch (err) {
+                                error.EndOfStream => if (bytes_needed != 0) {
+                                    bytes_needed = 0;
+
+                                    break :codepoint std.unicode.replacement_character;
+                                } else {
+                                    break;
+                                },
+                                else => return err,
+                            };
+
+                            if (bytes_needed == 0) {
+                                switch (byte) {
+                                    0x00...0x7F => {
+                                        break :codepoint byte;
+                                    },
+                                    0xC2...0xDF => {
+                                        bytes_needed = 1;
+                                        // The five least significant bits of byte.
+                                        codepoint = byte & 0x1F;
+                                    },
+                                    0xE0...0xEF  => {
+                                        if (byte == 0xE0) {
+                                            lower_boundary = 0xA0;
+                                        } else if (byte == 0xED) {
+                                            upper_boundary = 0x9F;
+                                        }
+
+                                        bytes_needed = 2;
+                                        // The four least significant bits of byte.
+                                        codepoint = byte & 0xF;
+                                    },
+                                    0xF0...0xF4 => {
+                                        if (byte == 0xF0) {
+                                            lower_boundary = 0x90;
+                                        } else if (byte == 0xF4) {
+                                            upper_boundary = 0x8F;
+                                        }
+
+                                        bytes_needed = 3;
+                                        // The three least significant bits of byte.
+                                        codepoint = byte & 0xF;
+                                    },
+                                    else => {
+                                        break :codepoint std.unicode.replacement_character;
+                                    }
+                                }
+
+                                continue;
+                            }
+
+                            if (byte < lower_boundary or byte > upper_boundary) {
+                                codepoint = 0;
+                                bytes_needed = 0;
+                                bytes_seen = 0;
+                                lower_boundary = 0x80;
+                                upper_boundary = 0xBF;
+                                // "Restore byte to ioQueue", so that the byte will be read again in the next iteration
+                                try file_data.seeker.seekBy(-1);
+
+                                break :codepoint std.unicode.replacement_character;
+                            }
+
+                            lower_boundary = 0x80;
+                            upper_boundary = 0xBF;
+                            // Shift the existing bits of UTF-8 code point left by six places and set the newly-vacated
+                            // six least significant bits to the six least significant bits of byte.
+                            codepoint = (codepoint << 6) | (byte & 0x3F);
+                            bytes_seen += 1;
+
+                            if (bytes_seen != bytes_needed) {
+                                continue;
+                            }
+
+                            const cp = codepoint;
+                            codepoint = 0;
+                            bytes_needed = 0;
+                            bytes_seen = 0;
+                            break :codepoint cp;
+                        };
+                        _ = current_codepoint;
+
+                        codepoint_column_index += 1;
+                    }
+
+                    break :column codepoint_column_index;
+                };
+
+                return Location {
+                    .line_number = self.lineNumber(file_id, line_index),
+                    .column_number = self.columnNumber(file_id, column_index),
                 };
             } else {
                 return null;

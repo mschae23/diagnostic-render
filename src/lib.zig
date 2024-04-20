@@ -14,18 +14,24 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! This library provides an [ASCII renderer] for printing formatted [diagnostics]
-//! like error messages and warnings on some source code.
+//! This library provides a [text renderer] for printing formatted [diagnostics]
+//! like error messages and warnings on some source code using an "ASCII art"-like
+//! format for fixed-width font output like in a terminal.
 //!
 //! These diagnostics contain annotations that are shown directly on the lines
 //! in the source they refer to, as well as notes shown after the source.
 //!
-//! # Example
-//! ```text
-//! // TODO give an example here
+//! ## Example
+//! ```
+//! error[example/expect]: Example diagnostic message
+//!  --> src/example.zig
+//! 1 | const main = 23;
+//!   |       ^^^^^^^^^ expected something here
+//! 2 | something += 3.0;
+//!   |              --- due to this
 //! ```
 //!
-//! [ASCII renderer]: render.DiagnosticRenderer
+//! [text renderer]: render.DiagnosticRenderer
 //! [diagnostics]: diagnostic.Diagnostic
 
 pub const io = @import("./io.zig");
