@@ -42,17 +42,21 @@ pub const Severity = enum(u3) {
     /// An unexpected bug.
     bug,
 
+    pub fn asString(value: Severity) [:0]const u8 {
+        return switch (value) {
+            .help => "help",
+            .note => "note",
+            .warning => "warning",
+            .@"error" => "error",
+            .bug => "bug",
+        };
+    }
+
     pub fn format(value: Severity, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = fmt;
         _ = options;
 
-        switch (value) {
-            .help => return writer.print("help", .{}),
-            .note => return writer.print("note", .{}),
-            .warning => return writer.print("warning", .{}),
-            .@"error" => return writer.print("error", .{}),
-            .bug => return writer.print("bug", .{}),
-        }
+        return writer.writeAll(value.asString());
     }
 };
 

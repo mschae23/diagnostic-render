@@ -242,6 +242,9 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
         }
     }
 
+    // TODO Take annotations labels with line breaks into account.
+    //      These should "simply" take up as many vertical offsets as they have lines.
+
     // Process the annotations starting on this line.
     //
     // Iterates through all multi-line annotations starting on this line in
@@ -645,7 +648,10 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                         .vertical_bar_index = (continuing_end_index + additional_continuing_annotations.items.len) - 1,
                     }};
 
-                    continuing_end_index -|= 1;
+                    if (start_end.data == .end) {
+                        continuing_end_index -|= 1;
+                    }
+
                     break;
                 }
             }

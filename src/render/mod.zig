@@ -42,14 +42,14 @@ pub const RenderConfig = struct {
 pub fn DiagnosticRenderer(comptime FileId: type) type {
     return struct {
         global_allocator: std.mem.Allocator,
-        writer: std.io.AnyWriter, colors: std.io.tty.Config, files: file.Files(FileId), config: RenderConfig,
+        writer: std.io.AnyWriter, colors: std.io.tty.Config, files: *file.Files(FileId), config: RenderConfig,
 
         max_nested_blocks: usize, line_digits: u32,
 
         const Self = @This();
 
         /// Creates a new diagnostics renderer.
-        pub fn init(allocator: std.mem.Allocator, writer: std.io.AnyWriter, colors: std.io.tty.Config, files: file.Files(FileId), config: RenderConfig) Self {
+        pub fn init(allocator: std.mem.Allocator, writer: std.io.AnyWriter, colors: std.io.tty.Config, files: *file.Files(FileId), config: RenderConfig) Self {
             return Self {
                 .global_allocator = allocator,
                 .writer = writer, .colors = colors, .files = files, .config = config,
@@ -63,11 +63,6 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
         pub fn render(self: *Self, diagnostics: []const Diagnostic(FileId)) anyerror!void {
             if (diagnostics.len == 0) {
                 return;
-            }
-
-            defer {
-                var files = self.files;
-                files.deinit();
             }
 
             return self.renderImpl(diagnostics);
@@ -181,9 +176,43 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
         }
 
         fn renderDiagnosticFooter(self: *Self, diagnostic: *const Diagnostic(FileId)) anyerror!void {
-            // Render notes
-            _ = self;
-            _ = diagnostic;
+            var dw = DisplayWidth { .data = &self.files.displaywidth_data };
+
+            for (diagnostic.notes) |note| {
+                try self.writeLineNumber(null, .note);
+                try self.writer.writeByte(' ');
+
+                try self.config.colors.writeNoteSeverity(self.colors, self.writer, note.severity);
+                const severity_str = note.severity.asString();
+                // A bit unnecessary, since we know the severity string is just ASCII data and therefore
+                // just taking the slice's length would suffice, but whatever, this is more robust.
+                const severity_columns = dw.strWidth(severity_str);
+                try self.writer.writeAll(severity_str);
+
+                try self.config.colors.writeReset(self.colors, self.writer);
+                try self.writer.writeAll(": ");
+
+                try self.config.colors.writeNoteMessage(self.colors, self.writer, note.severity);
+
+                var start: usize = 0;
+                var end: usize = 0;
+
+                while (end < note.message.len) {
+                    if (note.message[end] == '\n') {
+                        try self.writer.writeAll(note.message[start..end]);
+                        start = end + 1;
+
+                        if (start < note.message.len) {
+                            try self.writer.writeByte('\n');
+                            try self.writer.writeByteNTimes(' ', self.line_digits + 5 + severity_columns);
+                        }
+                    }
+
+                    end += 1;
+                }
+
+                try self.writer.writeAll(note.message[start..end]);
+            }
         }
 
         fn renderDiagnosticFile(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, annotations: *std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {
@@ -311,9 +340,8 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 if (active_annotations.items.len != 0) {
                     try self.renderPartLines(allocator, diagnostic, file_id, current_line_index, last_line_index,
                         continuing_annotations, active_annotations, &already_printed_end_line_index);
+                    last_line_index = current_line_index;
                 }
-
-                last_line_index = current_line_index;
             }
 
             if (last_line_index) |last_line| {
@@ -324,13 +352,13 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
         }
 
         fn renderPostSurroundingLines(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, main_line: usize, last_line: usize, continuing_annotations: []const *const Annotation(FileId), already_printed_end_line_index: *usize) anyerror!void {
-            // self.debug.print("[debug] potentially printing post surrounding lines, last line: {}, already printed to: {}\n", .{last_line, already_printed_to.*})?;
+            // std.debug.print("[debug] potentially printing post surrounding lines, last line: {}, already printed to: {}\n", .{last_line, already_printed_to.*});
 
             if (last_line + 1 >= already_printed_end_line_index.*) {
                 const first_print_line = @max(last_line + 1, already_printed_end_line_index.*);
                 const last_print_line = @min(last_line + self.config.surrounding_lines, main_line - 1);
 
-                // self.debug.print("[debug] printing post surrounding lines, last line: {}, first: {}, last: {}", .{last_line, first_print_line, last_print_line})?;
+                // std.debug.print("[debug] printing post surrounding lines, last line: {}, first: {}, last: {}, main line: {}\n", .{last_line, first_print_line, last_print_line, main_line});
 
                 if (last_print_line >= first_print_line) {
                     var line: usize = first_print_line;
@@ -353,7 +381,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
             // std.debug.print("[debug] current line ({}); first = {}, last = {}\n", .{current_line_index, first_print_line_index, last_print_line_index});
 
-            if (first_print_line_index != 0 and first_print_line_index > already_printed_end_line_index.*) {
+            if (first_print_line_index != 0 and first_print_line_index > already_printed_end_line_index.* + 1) {
                 try self.writeSourceLine(allocator, diagnostic, file_id, null, .ellipsis, continuing_annotations.items);
             }
 
@@ -374,9 +402,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
             try self.writeLineNumber(line_number, separator);
 
-            if (separator == .pipe or separator == .end) {
-                try self.writer.writeByte(' ');
-            }
+            var requires_space = separator == .pipe or separator == .note;
 
             {
                 var i: usize = 0;
@@ -384,11 +410,15 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 while (i < continuing_annotations.len) : (i += 1) {
                     const annotation = continuing_annotations[i];
 
+                    if (requires_space) {
+                        try self.writer.writeByte(' ');
+                    }
+
                     try self.config.colors.writeAnnotation(self.colors, self.writer, annotation.style, diagnostic.severity);
                     try self.writer.writeByte('|');
                     try self.config.colors.writeReset(self.colors, self.writer);
 
-                    try self.writer.writeByte(' ');
+                    requires_space = true;
                 }
             }
 
@@ -398,7 +428,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 const line_range = try self.files.lineRange(file_id, line) orelse unreachable;
 
                 if (line_range.end != line_range.start) {
-                    try self.writer.writeByteNTimes(' ', 2 * (self.max_nested_blocks - continuing_annotations.len));
+                    try self.writer.writeByteNTimes(' ', 2 * (self.max_nested_blocks - continuing_annotations.len) + @intFromBool(requires_space));
                     try seeker.seekTo(@as(u64, line_range.start));
 
                     // UTF-8 decoding is implemented as specified in https://encoding.spec.whatwg.org/#utf-8-decoder.
@@ -567,7 +597,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
         }
 
         fn renderLineAnnotations(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, continuing_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId)), active_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {
-            var annotation_data = try calculate.calculate(FileId, allocator, diagnostic, &self.files, file_id, line_index, self.config.tab_length, continuing_annotations.items, active_annotations.items);
+            var annotation_data = try calculate.calculate(FileId, allocator, diagnostic, self.files, file_id, line_index, self.config.tab_length, continuing_annotations.items, active_annotations.items);
             defer annotation_data.deinit(allocator);
 
             const ConnectingData = struct {
@@ -593,7 +623,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 }
 
                 if (last_label and item != .newline) {
-                    unreachable;
+                    std.debug.panic("Label is not last annotation data on line", .{});
                 }
 
                 switch (item) {
@@ -612,6 +642,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
                         if (vertical_bar_index < data.vertical_bar_index + 1) {
                             try self.writer.writeByteNTimes(' ', 2 * (1 + data.vertical_bar_index - vertical_bar_index));
+                            vertical_bar_index = data.vertical_bar_index + 1;
                         }
 
                         (try connection_stack.addOne(allocator)).* = ConnectingData {
@@ -622,11 +653,15 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
                         // To get to column_index == 0
                         try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
-                        try self.writer.writeByte('_');
+                        try self.writer.writeByteNTimes('_', 2 * (self.max_nested_blocks - vertical_bar_index) + 1);
                         pre_source = false;
                     },
                     .start => |data| {
                         try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.location.column_index);
+
+                        if (data.location.column_index < column_index) {
+                            continue;
+                        }
 
                         try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
                         try self.writer.writeByte(switch (data.style) {
@@ -647,6 +682,10 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     .end => |data| {
                         try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.location.column_index);
 
+                        if (data.location.column_index < column_index) {
+                            continue;
+                        }
+
                         try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
                         try self.writer.writeByte(switch (data.style) {
                             .primary => '^',
@@ -657,12 +696,20 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     .hanging => |data| {
                         try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.location.column_index);
 
+                        if (data.location.column_index < column_index) {
+                            continue;
+                        }
+
                         try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
                         try self.writer.writeByte('|');
                         column_index += 1;
                     },
                     .label => |data| {
                         try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.location.column_index);
+
+                        if (data.location.column_index < column_index) {
+                            continue;
+                        }
 
                         try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
                         try self.writer.writeAll(data.label);
@@ -749,7 +796,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             arrow,
             ellipsis,
             pipe,
-            end,
+            note,
         };
 
         fn writeLineNumber(self: *Self, line: ?usize, separator: LineNumberSeparator) anyerror!void {
@@ -777,12 +824,11 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     try self.writer.writeByte('|');
                     try self.config.colors.writeReset(self.colors, self.writer);
                 },
-                .end => {
+                .note => {
                     try self.writer.writeByte(' ');
                     try self.config.colors.writeLineNumberSeparator(self.colors, self.writer);
                     try self.writer.writeByte('=');
                     try self.config.colors.writeReset(self.colors, self.writer);
-                    try self.writer.writeByte(' ');
                 },
             }
         }
