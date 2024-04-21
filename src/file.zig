@@ -394,7 +394,9 @@ pub fn Files(comptime FileId: type) type {
 
                         if (grapheme_break) {
                             if (last_codepoint == '\t') {
-                                result_column_index += tab_length;
+                                // An alternative to this approach is "elastic tabstops": https://nick-gravgaard.com/elastic-tabstops/,
+                                // but it seems to be rarely used.
+                                result_column_index += tab_length - (result_column_index % tab_length);
                             } else {
                                 result_column_index += dw.strWidth(grapheme_cluster.items);
                             }
@@ -409,8 +411,6 @@ pub fn Files(comptime FileId: type) type {
                         _ = std.unicode.utf8Encode(last_codepoint.?, try grapheme_cluster.addManyAsSlice(self.allocator, std.unicode.utf8CodepointSequenceLength(last_codepoint.?) catch unreachable)) catch unreachable;
 
                         if (last_codepoint == '\t') {
-                            // An alternative to this approach is "elastic tabstops": https://nick-gravgaard.com/elastic-tabstops/,
-                            // but it seems to be rarely used.
                             result_column_index += tab_length - (result_column_index % tab_length);
                         } else {
                             result_column_index += dw.strWidth(grapheme_cluster.items);

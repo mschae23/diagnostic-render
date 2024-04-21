@@ -15,6 +15,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
+const grapheme = @import("zg-grapheme");
+const DisplayWidth = @import("zg-displaywidth");
 const io = @import("../io.zig");
 const file = @import("../file.zig");
 const LineColumn = file.LineColumn;
@@ -376,16 +378,18 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 try self.writer.writeByte(' ');
             }
 
-            var i: usize = 0;
+            {
+                var i: usize = 0;
 
-            while (i < continuing_annotations.len) : (i += 1) {
-                const annotation = continuing_annotations[i];
+                while (i < continuing_annotations.len) : (i += 1) {
+                    const annotation = continuing_annotations[i];
 
-                try self.config.colors.writeAnnotation(self.colors, self.writer, annotation.style, diagnostic.severity);
-                try self.writer.writeByte('|');
-                try self.config.colors.writeReset(self.colors, self.writer);
+                    try self.config.colors.writeAnnotation(self.colors, self.writer, annotation.style, diagnostic.severity);
+                    try self.writer.writeByte('|');
+                    try self.config.colors.writeReset(self.colors, self.writer);
 
-                try self.writer.writeByte(' ');
+                    try self.writer.writeByte(' ');
+                }
             }
 
             if (line_index) |line| {
@@ -395,23 +399,156 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
                 if (line_range.end != line_range.start) {
                     try self.writer.writeByteNTimes(' ', 2 * (self.max_nested_blocks - continuing_annotations.len));
-
                     try seeker.seekTo(@as(u64, line_range.start));
 
-                    // TODO Handle UTF-8 manually as specified in https://encoding.spec.whatwg.org/#utf-8-decoder.
-                    //      This way, we can ensure that ill-conforming code unit sequences are handled the exact
-                    //      same way as Files.columnIndex.
-                    //      The drawback is that, while it won't need the allocator anymore, this function will
-                    //      have to stream the line from the reader to the writer byte for byte (because it has to
-                    //      constantly decode and re-encode the UTF-8 data).
-                    // TODO Also handle tabs
+                    // UTF-8 decoding is implemented as specified in https://encoding.spec.whatwg.org/#utf-8-decoder.
+                    // Also, it has to be kept in sync with the implementation in Files.columnIndex
 
-                    const buf: []u8 = try allocator.alloc(u8, line_range.end - line_range.start);
-                    defer allocator.free(buf);
-                    try reader.readNoEof(buf);
+                    var column_index: usize = 0;
+
+                    const dw = DisplayWidth { .data = &self.files.displaywidth_data };
+                    var grapheme_state = grapheme.State {};
+                    var grapheme_cluster = try std.ArrayListUnmanaged(u8).initCapacity(allocator, 1);
+                    defer grapheme_cluster.deinit(allocator);
+
+                    var last_codepoint: ?u21 = null;
+
+                    var codepoint: u21 = 0;
+                    var bytes_seen: u3 = 0;
+                    var bytes_needed: u3 = 0;
+                    var lower_boundary: u21 = 0x80;
+                    var upper_boundary: u21 = 0xBF;
 
                     try self.config.colors.writeSource(self.colors, self.writer);
-                    try self.writer.writeAll(buf);
+
+                    while (true) {
+                        const current_codepoint = codepoint: {
+                            const byte = reader.readByte() catch |err| switch (err) {
+                                error.EndOfStream => if (bytes_needed != 0) {
+                                    bytes_needed = 0;
+
+                                    break :codepoint std.unicode.replacement_character;
+                                } else {
+                                    if (last_codepoint != null) {
+                                        _ = std.unicode.utf8Encode(last_codepoint.?, try grapheme_cluster.addManyAsSlice(allocator, std.unicode.utf8CodepointSequenceLength(last_codepoint.?) catch unreachable)) catch unreachable;
+
+                                        if (last_codepoint == '\t') {
+                                            const tab_length = self.config.tab_length - (column_index % self.config.tab_length);
+                                            column_index += tab_length;
+                                            try self.writer.writeByteNTimes(' ', tab_length);
+                                        } else {
+                                            column_index += dw.strWidth(grapheme_cluster.items);
+                                            try self.writer.writeAll(grapheme_cluster.items);
+                                        }
+
+                                        grapheme_cluster.clearRetainingCapacity();
+                                    }
+
+                                    break;
+                                },
+                                else => return err,
+                            };
+
+                            if (bytes_needed == 0) {
+                                switch (byte) {
+                                    0x00...0x7F => {
+                                        break :codepoint byte;
+                                    },
+                                    0xC2...0xDF => {
+                                        bytes_needed = 1;
+                                        // The five least significant bits of byte.
+                                        codepoint = byte & 0x1F;
+                                    },
+                                    0xE0...0xEF  => {
+                                        if (byte == 0xE0) {
+                                            lower_boundary = 0xA0;
+                                        } else if (byte == 0xED) {
+                                            upper_boundary = 0x9F;
+                                        }
+
+                                        bytes_needed = 2;
+                                        // The four least significant bits of byte.
+                                        codepoint = byte & 0xF;
+                                    },
+                                    0xF0...0xF4 => {
+                                        if (byte == 0xF0) {
+                                            lower_boundary = 0x90;
+                                        } else if (byte == 0xF4) {
+                                            upper_boundary = 0x8F;
+                                        }
+
+                                        bytes_needed = 3;
+                                        // The three least significant bits of byte.
+                                        codepoint = byte & 0xF;
+                                    },
+                                    else => {
+                                        break :codepoint std.unicode.replacement_character;
+                                    }
+                                }
+
+                                continue;
+                            }
+
+                            if (byte < lower_boundary or byte > upper_boundary) {
+                                codepoint = 0;
+                                bytes_needed = 0;
+                                bytes_seen = 0;
+                                lower_boundary = 0x80;
+                                upper_boundary = 0xBF;
+                                // "Restore byte to ioQueue", so that the byte will be read again in the next iteration
+                                try seeker.seekBy(-1);
+
+                                break :codepoint std.unicode.replacement_character;
+                            }
+
+                            lower_boundary = 0x80;
+                            upper_boundary = 0xBF;
+                            // Shift the existing bits of UTF-8 code point left by six places and set the newly-vacated
+                            // six least significant bits to the six least significant bits of byte.
+                            codepoint = (codepoint << 6) | (byte & 0x3F);
+                            bytes_seen += 1;
+
+                            if (bytes_seen != bytes_needed) {
+                                continue;
+                            }
+
+                            const cp = codepoint;
+                            codepoint = 0;
+                            bytes_needed = 0;
+                            bytes_seen = 0;
+                            break :codepoint cp;
+                        };
+
+                        if (last_codepoint == null) {
+                            // First iteration
+                            last_codepoint = current_codepoint;
+                            continue;
+                        } else {
+                            _ = std.unicode.utf8Encode(last_codepoint.?, try grapheme_cluster.addManyAsSlice(allocator, std.unicode.utf8CodepointSequenceLength(last_codepoint.?) catch unreachable)) catch unreachable;
+                        }
+
+                        const grapheme_break = grapheme.graphemeBreak(last_codepoint.?, current_codepoint, &self.files.grapheme_data, &grapheme_state);
+
+                        if (grapheme_break) {
+                            if (last_codepoint == '\t') {
+                                const tab_length = self.config.tab_length - (column_index % self.config.tab_length);
+                                column_index += tab_length;
+                                try self.writer.writeByteNTimes(' ', tab_length);
+                            } else {
+                                column_index += dw.strWidth(grapheme_cluster.items);
+                                try self.writer.writeAll(grapheme_cluster.items);
+                            }
+
+                            grapheme_cluster.clearRetainingCapacity();
+                        }
+
+                        last_codepoint = current_codepoint;
+
+                        if (current_codepoint == '\n') {
+                            break;
+                        }
+                    }
+
                     try self.config.colors.writeReset(self.colors, self.writer);
                 }
             }

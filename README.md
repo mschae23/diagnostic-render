@@ -1,7 +1,7 @@
 ## Diagnostic renderer
 This is a library for printing formatted diagnostics like error messages and warnings on some source code, intended for use in compilers.
 
-## License
+### License
 diagnostic-render Copyright (C) 2024  mschae23
 
 This program is free software: you can redistribute it and/or modify
