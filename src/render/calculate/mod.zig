@@ -229,8 +229,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
 
             switch (start_end.data) {
                 .start => continue,
-                .end => {
-                    // TODO Check whether the annotation has a label at all
+                .end => if (start_end.annotation.label.len != 0) {
                     vertical_offset.label = @max(if (vertical_offset.connection == 0) 0 else vertical_offset.connection + 1, next_label_offset);
                     next_label_offset = vertical_offset.label + 1;
 
@@ -299,12 +298,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                     vertical_offsets.items[i].connection = next_connection_offset;
                     vertical_offsets.items[i].label = 0;
                     next_connection_offset += 1;
-                    // TODO Check whether this is correct (maybe use @max(vertical_offset.connection + 1, next_label_offset) like above?)
-                    next_label_offset += 1;
-
-                    if (next_label_offset == 1) {
-                        next_label_offset = 2;
-                    }
+                    next_label_offset = @max(vertical_offsets.items[i].connection + 2, next_label_offset);
                 },
                 .end => |data| {
                     _ = data;
@@ -412,12 +406,12 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                 .end => |data| {
                     _ = data;
 
-                    // TODO Check whether the annotation even has a label at all
-
-                    if (ending_label_offset != 0 and vertical_offsets.items[i].label == 0) {
-                        vertical_offsets.items[i].label = ending_label_offset + 1;
-                    } else {
-                        vertical_offsets.items[i].label += ending_label_offset;
+                    if (start_end.annotation.label.len != 0) {
+                        if (ending_label_offset != 0 and vertical_offsets.items[i].label == 0) {
+                            vertical_offsets.items[i].label = ending_label_offset + 1;
+                        } else {
+                            vertical_offsets.items[i].label += ending_label_offset;
+                        }
                     }
                 },
                 .both => |data| {
