@@ -379,9 +379,9 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             const first_print_line_index = @max(current_line_index -| self.config.surrounding_lines, already_printed_end_line_index.*);
             const last_print_line_index = current_line_index;
 
-            // std.debug.print("[debug] current line ({}); first = {}, last = {}\n", .{current_line_index, first_print_line_index, last_print_line_index});
+            // std.debug.print("[debug] current line ({}); first = {}, last = {}, already end = {}\n", .{current_line_index, first_print_line_index, last_print_line_index, already_printed_end_line_index.*});
 
-            if (first_print_line_index != 0 and already_printed_end_line_index.* != 0 and first_print_line_index > already_printed_end_line_index.* + 1) {
+            if (first_print_line_index != 0 and already_printed_end_line_index.* != 0 and first_print_line_index > already_printed_end_line_index.*) {
                 try self.writeSourceLine(allocator, diagnostic, file_id, null, .ellipsis, continuing_annotations.items);
             }
 
@@ -389,7 +389,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
             while (line <= last_print_line_index) : (line += 1) {
                 try self.renderLine(allocator, diagnostic, file_id, line, current_line_index, &continuing_annotations, &active_annotations);
-                already_printed_end_line_index.* += 1;
+                already_printed_end_line_index.* = line + 1;
             }
         }
 

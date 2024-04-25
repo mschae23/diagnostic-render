@@ -212,6 +212,7 @@ pub const output = struct {
         \\13 | | |       for _i in 1..n {
         \\   | | |  ____________________^
         \\14 | | | |         sum = last + curr;
+        \\  ...| | |
         \\16 | | | |         curr = sum;
         \\17 | | | |     }
         \\   | | | |_____^ this is a pair of braces
