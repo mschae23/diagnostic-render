@@ -119,7 +119,7 @@ pub fn Annotation(comptime FileId: type) type {
         }
 
         /// Add a label to the annotation.
-        pub fn with_label(self: Self, label: []const u8) Self {
+        pub fn withLabel(self: Self, label: []const u8) Self {
             var self2 = self;
             self2.label = label;
             return self2;
@@ -255,48 +255,48 @@ pub fn Diagnostic(comptime FileId: type) type {
         }
 
         /// Set the name or code of the diagnostic.
-        pub fn with_name(self: Self, name: []const u8) Self {
+        pub fn withName(self: Self, name: []const u8) Self {
             var self2 = self;
             self2.name = name;
             return self2;
         }
 
         /// Set the message of the diagnostic.
-        pub fn with_message(self: Self, message: []const u8) Self {
+        pub fn withMessage(self: Self, message: []const u8) Self {
             var self2 = self;
             self2.message = message;
             return self2;
         }
 
         // /// Add an annotation to the diagnostic.
-        // pub fn with_annotation(self: Self, annotation: Annotation(FileId)) Self {
+        // pub fn withAnnotation(self: Self, annotation: Annotation(FileId)) Self {
         //     self.annotations.addOne(annotation);
         //     return self;
         // }
 
         /// Set the annotations of the diagnostic.
-        pub fn with_annotations(self: Self, annotations: []const Annotation(FileId)) Self {
+        pub fn withAnnotations(self: Self, annotations: []const Annotation(FileId)) Self {
             var self2 = self;
             self2.annotations = annotations;
             return self2;
         }
 
         // /// Add a note to the diagnostic.
-        // pub fn with_note(self: Self, note: Note) Self {
+        // pub fn withNote(self: Self, note: Note) Self {
         //     var self2 = self;
         //     self2.notes.push(note);
         //     return self2;
         // }
 
         /// Set the notes of the diagnostic.
-        pub fn with_notes(self: Self, notes: []const Note) Self {
+        pub fn withNotes(self: Self, notes: []const Note) Self {
             var self2 = self;
             self2.notes = notes;
             return self2;
         }
 
         /// Sets the number of suppressed diagnostics.
-        pub fn with_suppressed_count(self: Self, suppressed_count: u32) Self {
+        pub fn withSuppressedCount(self: Self, suppressed_count: u32) Self {
             var self2 = self;
             self2.suppressed_count = suppressed_count;
             return self2;

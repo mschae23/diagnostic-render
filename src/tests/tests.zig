@@ -45,13 +45,13 @@ test "Development" {
     defer files.deinit();
 
     const diagnostics = .{
-        Diagnostic.err().with_name("thing/test").with_message("Test").with_annotations(&.{
-            Annotation.primary(0, diag.Span.init(43, 45 + 35 + 1)).with_label("label 1"),
-            Annotation.secondary(0, diag.Span.init(4, 33)).with_label("label 2")
+        Diagnostic.err().withName("thing/test").withMessage("Test").withAnnotations(&.{
+            Annotation.primary(0, diag.Span.init(43, 45 + 35 + 1)).withLabel("label 1"),
+            Annotation.secondary(0, diag.Span.init(4, 33)).withLabel("label 2")
         }),
-        Diagnostic.err().with_name("thing/test2").with_message("Test 2").with_annotations(&.{
-            Annotation.primary(0, diag.Span.init(7, 13)).with_label("label 1"),
-            Annotation.secondary(0, diag.Span.init(38, 42)).with_label("label 2")
+        Diagnostic.err().withName("thing/test2").withMessage("Test 2").withAnnotations(&.{
+            Annotation.primary(0, diag.Span.init(7, 13)).withLabel("label 1"),
+            Annotation.secondary(0, diag.Span.init(38, 42)).withLabel("label 2")
         })
     };
 
@@ -63,7 +63,7 @@ test "Development" {
 }
 
 pub const output = struct {
-    fn runTest(path: [:0]const u8, input: []const u8, diagnostics: []const Diagnostic, expected: []const u8) !void {
+    pub fn runTest(path: [:0]const u8, input: []const u8, diagnostics: []const Diagnostic, expected: []const u8) !void {
         var fbs = std.io.fixedBufferStream(input);
 
         var file_hashmap = std.AutoHashMap(usize, file.FileData).init(std.testing.allocator);
@@ -86,50 +86,32 @@ pub const output = struct {
         try std.testing.expectEqualStrings(expected, actual.items);
     }
 
-    test "header 1" {
-        try runTest("src/path/to/file.something", "unused source", &.{
-            Diagnostic.err().with_name("test/diagnostic_1").with_message("Test message")
-        }, "error[test/diagnostic_1]: Test message\n");
-    }
-
-    test "footer 1" {
-        try runTest("src/path/to/file.something", "unused source", &.{
-            Diagnostic.warning().with_name("test/diagnostic_2").with_message("Test message").with_notes(&.{
-                Note.note("This is a test note.\nYes.")
-            })
-        },
-        \\warning[test/diagnostic_2]: Test message
-        \\ = note: This is a test note.
-        \\         Yes.
-        );
-    }
+    pub const fibonacci_input =
+        \\pub fn fibonacci(n: i32) -> u64 {
+        \\    if n < 0 {
+        \\        panic!("{} is negative!", n);
+        \\    } else if n == 0 {
+        \\        panic!("zero is not a right argument to fibonacci()!");
+        \\    } else if n == 1 {
+        \\        return 1;
+        \\    }
+        \\
+        \\    let mut sum = 0;
+        \\    let mut last = 0;
+        \\    let mut curr = 1;
+        \\    for _i in 1..n {
+        \\        sum = last + curr;
+        \\        last = curr;
+        \\        curr = sum;
+        \\    }
+        \\    sum
+        \\}
+        ;
 
     test "fibonacci" {
-        const input =
-            \\pub fn fibonacci(n: i32) -> u64 {
-            \\    if n < 0 {
-            \\        panic!("{} is negative!", n);
-            \\    } else if n == 0 {
-            \\        panic!("zero is not a right argument to fibonacci()!");
-            \\    } else if n == 1 {
-            \\        return 1;
-            \\    }
-            \\
-            \\    let mut sum = 0;
-            \\    let mut last = 0;
-            \\    let mut curr = 1;
-            \\    for _i in 1..n {
-            \\        sum = last + curr;
-            \\        last = curr;
-            \\        curr = sum;
-            \\    }
-            \\    sum
-            \\}
-            ;
-
-        var annotations = std.ArrayList(Annotation).init(std.testing.allocator);
+       var annotations = std.ArrayList(Annotation).init(std.testing.allocator);
         defer annotations.deinit();
-        var diagnostic = Diagnostic.note().with_name("info/fibonacci").with_message("A fibonacci function");
+        var diagnostic = Diagnostic.note().withName("info/fibonacci").withMessage("A fibonacci function");
 
         {
             const Scope = struct {
@@ -142,8 +124,8 @@ pub const output = struct {
 
             var i: usize = 0;
 
-            while (i < input.len) : (i += try std.unicode.utf8ByteSequenceLength(input[i])) {
-                const c = input[i];
+            while (i < fibonacci_input.len) : (i += try std.unicode.utf8ByteSequenceLength(fibonacci_input[i])) {
+                const c = fibonacci_input[i];
 
                 switch (c) {
                     '(' => (try opened.addOne()).* = .{ .start_byte_index = i, .close_char = ')', },
@@ -160,7 +142,7 @@ pub const output = struct {
 
                         const range = Span.init(scope.start_byte_index, i + 1);
                         const label = "this is a string";
-                        (try annotations.addOne()).* = Annotation.primary(0, range).with_label(label);
+                        (try annotations.addOne()).* = Annotation.primary(0, range).withLabel(label);
                     },
                     ')', ']', '}' => {
                         const scope = opened.pop();
@@ -172,7 +154,7 @@ pub const output = struct {
                                 '}' => "this is a pair of braces",
                                 else => unreachable,
                             };
-                            (try annotations.addOne()).* = Annotation.primary(0, range).with_label(label);
+                            (try annotations.addOne()).* = Annotation.primary(0, range).withLabel(label);
                         } else {
                             return error.WrongScope;
                         }
@@ -181,15 +163,15 @@ pub const output = struct {
                 }
             }
 
-            (try annotations.addOne()).* = Annotation.primary(0, Span.init(0, input.len)).with_label("this is the whole program");
-            diagnostic = diagnostic.with_annotations(annotations.items);
+            (try annotations.addOne()).* = Annotation.primary(0, Span.init(0, fibonacci_input.len)).withLabel("this is the whole program");
+            diagnostic = diagnostic.withAnnotations(annotations.items);
         }
 
         // TODO This test already works relatively well, however, it highlights an issue where if there are multiple
         //      ending (or presumably also singleline) annotations at the same column, only the label of one of them
         //      will be displayed.
 
-        try runTest("src/fibonacci.rs", input, &.{diagnostic},
+        try runTest("src/fibonacci.rs", fibonacci_input, &.{diagnostic},
         \\note[info/fibonacci]: A fibonacci function
         \\  --> src/fibonacci.rs:1:1
         \\ 1 |       pub fn fibonacci(n: i32) -> u64 {
@@ -242,6 +224,9 @@ pub const output = struct {
         \\
         );
     }
+
+    pub const zero = @import("./zero/tests.zig");
+    pub const one = @import("./one/tests.zig");
 };
 
 test {

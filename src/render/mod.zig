@@ -381,7 +381,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
             // std.debug.print("[debug] current line ({}); first = {}, last = {}\n", .{current_line_index, first_print_line_index, last_print_line_index});
 
-            if (first_print_line_index != 0 and first_print_line_index > already_printed_end_line_index.* + 1) {
+            if (first_print_line_index != 0 and already_printed_end_line_index.* != 0 and first_print_line_index > already_printed_end_line_index.* + 1) {
                 try self.writeSourceLine(allocator, diagnostic, file_id, null, .ellipsis, continuing_annotations.items);
             }
 

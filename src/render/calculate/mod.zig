@@ -231,7 +231,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                 .start => continue,
                 .end => if (start_end.annotation.label.len != 0) {
                     vertical_offset.label = @max(if (vertical_offset.connection == 0) 0 else vertical_offset.connection + 1, next_label_offset);
-                    next_label_offset = vertical_offset.label + 1;
+                    next_label_offset = vertical_offset.label + std.mem.count(u8, std.mem.trim(u8, start_end.annotation.label, &.{'\n'}), "\n") + 1;
 
                     if (next_label_offset == 1) {
                         next_label_offset = 2;
@@ -241,9 +241,6 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
             }
         }
     }
-
-    // TODO Take annotations labels with line breaks into account.
-    //      These should "simply" take up as many vertical offsets as they have lines.
 
     // Process the annotations starting on this line.
     //
@@ -415,6 +412,8 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                         } else {
                             vertical_offsets.items[i].label += ending_label_offset;
                         }
+
+                        ending_label_offset += std.mem.count(u8, std.mem.trim(u8, start_end.annotation.label, &.{'\n'}), "\n");
                     }
                 },
                 .both => |data| {
@@ -455,7 +454,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
 
                             if (end >= data.start.location.column_index) {
                                 next_connection_offset = 1;
-                                next_label_offset = 2;
+                                next_label_offset = @max(2, next_label_offset);
                                 break;
                             }
                         }
@@ -491,7 +490,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                             vertical_offsets.items[i].label = 0;
 
                             next_connection_offset = @max(next_connection_offset, 1);
-                            next_label_offset = @max(next_label_offset, 2);
+                            next_label_offset = @max(next_label_offset, @max(2, 1 + std.mem.count(u8, std.mem.trim(u8, start_end.annotation.label, &.{'\n'}), "\n")));
                             continue;
                         }
                     }
@@ -500,7 +499,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                     vertical_offsets.items[i].label = next_label_offset;
 
                     next_connection_offset += 1;
-                    next_label_offset += 1;
+                    next_label_offset += 1 + std.mem.count(u8, std.mem.trim(u8, start_end.annotation.label, &.{'\n'}), "\n");
 
                     if (next_label_offset == 1) {
                         next_label_offset = 2;
@@ -549,6 +548,15 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
 
     var current_vertical_offset: usize = 0;
     var continue_next_line: bool = false;
+
+    const RestLabel = struct {
+        style: diag.AnnotationStyle,
+        severity: diag.Severity,
+        location: LineColumn,
+        label: []const u8,
+    };
+
+    var rest_label: ?RestLabel = null;
 
     var additional_continuing_annotations = try std.ArrayListUnmanaged(*const Annotation(FileId)).initCapacity(allocator, 0);
     defer additional_continuing_annotations.deinit(allocator);
@@ -762,6 +770,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
         {
             // Add label data
             var i: usize = 0;
+            var found = false;
 
             while (i < starts_ends.len) : (i += 1) {
                 const start_end = starts_ends[i];
@@ -774,25 +783,55 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                     continue;
                 }
 
-                switch (start_end.data) {
+                const location = switch (start_end.data) {
                     .start => continue,
-                    .end => |data| (try final_data.addOne(allocator)).* =
-                        AnnotationData { .label = .{
-                            .style = start_end.annotation.style,
-                            .severity = diagnostic.severity,
-                            .location = if (vertical_offset.label == 0) LineColumn.init(data.location.line_index, data.location.column_index + 2) else data.location,
-                            .label = start_end.annotation.label,
-                        }},
-                    .both => |data| (try final_data.addOne(allocator)).* =
-                        AnnotationData { .label = .{
-                            .style = start_end.annotation.style,
-                            .severity = diagnostic.severity,
-                            .location = if (vertical_offset.label == 0) LineColumn.init(data.end.location.line_index, data.end.location.column_index + 2) else data.start.location,
-                            .label = start_end.annotation.label,
-                        }},
+                    .end => |data| if (vertical_offset.label == 0) LineColumn.init(data.location.line_index, data.location.column_index + 2) else data.location,
+                    .both => |data| if (vertical_offset.label == 0) LineColumn.init(data.end.location.line_index, data.end.location.column_index + 2) else data.start.location,
+                };
+
+                var label = std.mem.trim(u8, start_end.annotation.label, &.{'\n'});
+                const first_line_end = std.mem.indexOfScalar(u8, label, '\n');
+
+                if (first_line_end) |end| {
+                    rest_label = RestLabel {
+                        .style = start_end.annotation.style,
+                        .severity = diagnostic.severity,
+                        .location = location,
+                        .label = label[end + 1..],
+                    };
+                    label = label[0..end];
+                    continue_next_line = true;
                 }
 
+                (try final_data.addOne(allocator)).* = AnnotationData { .label = .{
+                    .style = start_end.annotation.style,
+                    .severity = diagnostic.severity,
+                    .location = location,
+                    .label = label,
+                }};
+
+                found = true;
                 break;
+            }
+
+            if (!found) {
+                if (rest_label) |*data| {
+                    var label = data.label;
+                    const line_end = std.mem.indexOfScalar(u8, label, '\n');
+
+                    if (line_end) |end| {
+                        data.label = label[end + 1..];
+                        label = label[0..end];
+                        continue_next_line = true;
+                    }
+
+                    (try final_data.addOne(allocator)).* = AnnotationData { .label = .{
+                        .style = data.style,
+                        .severity = data.severity,
+                        .location = data.location,
+                        .label = label,
+                    }};
+                }
             }
         }
 

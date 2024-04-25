@@ -47,8 +47,8 @@ pub const vertical_offsets = struct {
 
     pub const singleline = struct {
         test "1" {
-            const annotation1 = Annotation.primary(0, Span.init(3, 12)).with_label("expected type annotation here");
-            const annotation2 = Annotation.secondary(0, Span.init(28, 21)).with_label("due to this");
+            const annotation1 = Annotation.primary(0, Span.init(3, 12)).withLabel("expected type annotation here");
+            const annotation2 = Annotation.secondary(0, Span.init(28, 21)).withLabel("due to this");
 
             // 1 | let main = 23;
             //   |    ^^^^^^^^^^ expected type annotation here
@@ -92,8 +92,8 @@ pub const vertical_offsets = struct {
         }
 
         test "2" {
-            const annotation1 = Annotation.primary(0, Span.init(11, 13)).with_label("number");
-            const annotation2 = Annotation.secondary(0, Span.init(4, 8)).with_label("identifier");
+            const annotation1 = Annotation.primary(0, Span.init(11, 13)).withLabel("number");
+            const annotation2 = Annotation.secondary(0, Span.init(4, 8)).withLabel("identifier");
 
             // 1 | let main = 23;
             //   |     ----   ^^ number
@@ -138,8 +138,8 @@ pub const vertical_offsets = struct {
         }
 
         test "overlapping 1" {
-            const annotation1 = Annotation.primary(0, Span.init(4, 13)).with_label("something");
-            const annotation2 = Annotation.secondary(0, Span.init(8, 11)).with_label("something else");
+            const annotation1 = Annotation.primary(0, Span.init(4, 13)).withLabel("something");
+            const annotation2 = Annotation.secondary(0, Span.init(8, 11)).withLabel("something else");
 
             // 1 | let main = 23;
             //   |     ^^^^---^^
@@ -187,7 +187,7 @@ pub const vertical_offsets = struct {
 
     pub const ending = struct {
         test "1" {
-            const annotation1 = Annotation.primary(0, Span.init(0, 19)).with_label("something");
+            const annotation1 = Annotation.primary(0, Span.init(0, 19)).withLabel("something");
 
             // 2 | | something += 3.0;
             //   | |_____^ something
@@ -207,8 +207,8 @@ pub const vertical_offsets = struct {
         }
 
         test "2" {
-            const annotation1 = Annotation.primary(0, Span.init(0, 28)).with_label("something");
-            const annotation2 = Annotation.secondary(0, Span.init(4, 19)).with_label("something else");
+            const annotation1 = Annotation.primary(0, Span.init(0, 28)).withLabel("something");
+            const annotation2 = Annotation.secondary(0, Span.init(4, 19)).withLabel("something else");
 
             // 1 |     let main = 23;    // Vertical offsets for annotations on this line are not tested by this test
             //   |  ___^   -
@@ -243,7 +243,7 @@ pub const vertical_offsets = struct {
         }
 
         test "2 no label" {
-            const annotation1 = Annotation.primary(0, Span.init(0, 28)).with_label("something");
+            const annotation1 = Annotation.primary(0, Span.init(0, 28)).withLabel("something");
             const annotation2 = Annotation.secondary(0, Span.init(4, 19));
 
             // 1 |     let main = 23;    // Vertical offsets for annotations on this line are not tested by this test
@@ -278,8 +278,8 @@ pub const vertical_offsets = struct {
         }
 
         test "overlapping 1" {
-            const annotation1 = Annotation.primary(0, Span.init(0, 19)).with_label("something");
-            const annotation2 = Annotation.secondary(0, Span.init(4, 28)).with_label("something else");
+            const annotation1 = Annotation.primary(0, Span.init(0, 19)).withLabel("something");
+            const annotation2 = Annotation.secondary(0, Span.init(4, 28)).withLabel("something else");
 
             // 1 |     let main = 23;    // Vertical offsets for annotations on this line are not tested by this test
             //   |  ___^   -
@@ -316,7 +316,7 @@ pub const vertical_offsets = struct {
 
     pub const starting = struct {
         test "simple 1" {
-            const annotation1 = Annotation.primary(0, Span.init(4, 28)).with_label("something");
+            const annotation1 = Annotation.primary(0, Span.init(4, 28)).withLabel("something");
 
             // 1 |   let main = 23;
             //   |  _____^
@@ -337,8 +337,8 @@ pub const vertical_offsets = struct {
         }
 
         test "1" {
-            const annotation1 = Annotation.primary(0, Span.init(11, 28)).with_label("something");
-            const annotation2 = Annotation.secondary(0, Span.init(4, 8)).with_label("something else");
+            const annotation1 = Annotation.primary(0, Span.init(11, 28)).withLabel("something");
+            const annotation2 = Annotation.secondary(0, Span.init(4, 8)).withLabel("something else");
 
             // 1 |   let main = 23;
             //   |       ----   ^
@@ -378,8 +378,8 @@ pub const vertical_offsets = struct {
         }
 
         test "with ending 1" {
-            const annotation1 = Annotation.primary(0, Span.init(28, 38)).with_label("something");
-            const annotation2 = Annotation.secondary(0, Span.init(11, 24)).with_label("something else");
+            const annotation1 = Annotation.primary(0, Span.init(28, 38)).withLabel("something");
+            const annotation2 = Annotation.secondary(0, Span.init(11, 24)).withLabel("something else");
 
             // 1 |   let main = 23; // This line is not tested by this test
             //   |  ____________-
@@ -440,8 +440,8 @@ pub const final = struct {
         test "1" {
             const input = "test file contents";
 
-            const annotation = Annotation.primary(0, Span.init(5, 9)).with_label("test label");
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation});
+            const annotation = Annotation.primary(0, Span.init(5, 9)).withLabel("test label");
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation});
 
             // 1 | test file contents
             //   |      ^^^^ test label
@@ -480,9 +480,9 @@ pub const final = struct {
                 \\print(example_source);
             ++ "\n";
 
-            const annotation1 = Annotation.primary(0, Span.init(3, 13)).with_label("expected type annotation here");
-            const annotation2 = Annotation.secondary(0, Span.init(28, 31)).with_label("due to this");
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1, annotation2});
+            const annotation1 = Annotation.primary(0, Span.init(3, 13)).withLabel("expected type annotation here");
+            const annotation2 = Annotation.secondary(0, Span.init(28, 31)).withLabel("due to this");
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1, annotation2});
 
             // 1 | let main = 23;
             //   |    ^^^^^^^^^^ expected type annotation here
@@ -548,9 +548,9 @@ pub const final = struct {
                 \\print(example_source);
             ++ "\n";
 
-            const annotation1 = Annotation.primary(0, Span.init(11, 13)).with_label("number");
-            const annotation2 = Annotation.secondary(0, Span.init(4, 8)).with_label("identifier");
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1, annotation2});
+            const annotation1 = Annotation.primary(0, Span.init(11, 13)).withLabel("number");
+            const annotation2 = Annotation.secondary(0, Span.init(4, 8)).withLabel("identifier");
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1, annotation2});
 
             // 1 | let main = 23;
             //   |     ----   ^^ number
@@ -620,9 +620,9 @@ pub const final = struct {
                 \\print(example_source);
             ++ "\n";
 
-            const annotation1 = Annotation.primary(0, Span.init(4, 13)).with_label("something");
-            const annotation2 = Annotation.secondary(0, Span.init(8, 11)).with_label("something else");
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1, annotation2});
+            const annotation1 = Annotation.primary(0, Span.init(4, 13)).withLabel("something");
+            const annotation2 = Annotation.secondary(0, Span.init(8, 11)).withLabel("something else");
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1, annotation2});
 
             // 1 | let main = 23;
             //   |     ^^^^---^^
@@ -706,8 +706,8 @@ pub const final = struct {
                 \\print(example_source);
             ++ "\n";
 
-            const annotation1 = Annotation.primary(0, Span.init(0, 19)).with_label("something");
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1});
+            const annotation1 = Annotation.primary(0, Span.init(0, 19)).withLabel("something");
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1});
 
             // 1 |   let main = 23;
             //   |  _^
@@ -762,9 +762,9 @@ pub const final = struct {
                 \\print(example_source);
             ++ "\n";
 
-            const annotation1 = Annotation.primary(0, Span.init(0, 27)).with_label("something");
-            const annotation2 = Annotation.secondary(0, Span.init(4, 19)).with_label("something else");
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1});
+            const annotation1 = Annotation.primary(0, Span.init(0, 27)).withLabel("something");
+            const annotation2 = Annotation.secondary(0, Span.init(4, 19)).withLabel("something else");
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1});
 
             // 1 |     let main = 23;
             //   |  ___^   -
@@ -892,7 +892,7 @@ pub const final = struct {
 
             const annotation1 = Annotation.primary(0, Span.init(0, 27));
             const annotation2 = Annotation.secondary(0, Span.init(4, 19));
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1});
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1});
 
             // 1 |     let main = 23;
             //   |  ___^   -
@@ -992,9 +992,9 @@ pub const final = struct {
                 \\print(example_source);
             ++ "\n";
 
-            const annotation1 = Annotation.primary(0, Span.init(0, 19)).with_label("something");
-            const annotation2 = Annotation.secondary(0, Span.init(4, 29)).with_label("something else");
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1});
+            const annotation1 = Annotation.primary(0, Span.init(0, 19)).withLabel("something");
+            const annotation2 = Annotation.secondary(0, Span.init(4, 29)).withLabel("something else");
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1});
 
             // 1 |     let main = 23;
             //   |  ___^   -
@@ -1132,7 +1132,7 @@ pub const final = struct {
 
             const annotation1 = Annotation.primary(0, Span.init(0, 19));
             const annotation2 = Annotation.secondary(0, Span.init(4, 29));
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1});
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1});
 
             // 1 |     let main = 23;
             //   |  ___^   -
@@ -1256,8 +1256,8 @@ pub const final = struct {
                 \\print(example_source);
             ++ "\n";
 
-            const annotation1 = Annotation.primary(0, Span.init(4, 29)).with_label("something");
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1});
+            const annotation1 = Annotation.primary(0, Span.init(4, 29)).withLabel("something");
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1});
 
             // 1 |   let main = 23;
             //   |  _____^
@@ -1312,9 +1312,9 @@ pub const final = struct {
                 \\print(example_source);
             ++ "\n";
 
-            const annotation1 = Annotation.primary(0, Span.init(11, 29)).with_label("something");
-            const annotation2 = Annotation.secondary(0, Span.init(4, 8)).with_label("something else");
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1, annotation2});
+            const annotation1 = Annotation.primary(0, Span.init(11, 29)).withLabel("something");
+            const annotation2 = Annotation.secondary(0, Span.init(4, 8)).withLabel("something else");
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1, annotation2});
 
             // 1 |   let main = 23;
             //   |       ----   ^
@@ -1422,9 +1422,9 @@ pub const final = struct {
                 \\print(example_source);
             ++ "\n";
 
-            const annotation1 = Annotation.primary(0, Span.init(11, 29)).with_label("something");
+            const annotation1 = Annotation.primary(0, Span.init(11, 29)).withLabel("something");
             const annotation2 = Annotation.secondary(0, Span.init(4, 8));
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1, annotation2});
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1, annotation2});
 
             // 1 |   let main = 23;
             //   |       ----   ^
@@ -1502,9 +1502,9 @@ pub const final = struct {
                 \\print(example_source);
             ++ "\n";
 
-            const annotation1 = Annotation.primary(0, Span.init(28, 38)).with_label("something");
-            const annotation2 = Annotation.secondary(0, Span.init(11, 24)).with_label("something else");
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1, annotation2});
+            const annotation1 = Annotation.primary(0, Span.init(28, 38)).withLabel("something");
+            const annotation2 = Annotation.secondary(0, Span.init(11, 24)).withLabel("something else");
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1, annotation2});
 
             // 1 |   let main = 23;
             //   |  ____________-
@@ -1630,7 +1630,7 @@ pub const final = struct {
 
             const annotation1 = Annotation.primary(0, Span.init(28, 38));
             const annotation2 = Annotation.secondary(0, Span.init(11, 24));
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1, annotation2});
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1, annotation2});
 
             // 1 |   let main = 23;
             //   |  ____________-
@@ -1718,10 +1718,10 @@ pub const final = struct {
                 \\print(example_source);
             ++ "\n";
 
-            const annotation1 = Annotation.primary(0, Span.init(28, 38)).with_label("something");
-            const annotation2 = Annotation.secondary(0, Span.init(11, 24)).with_label("something else");
-            const annotation3 = Annotation.secondary(0, Span.init(0, input.len - 1)).with_label("full program");
-            const diagnostic = Diagnostic.err().with_annotations(&.{annotation1, annotation2, annotation3});
+            const annotation1 = Annotation.primary(0, Span.init(28, 38)).withLabel("something");
+            const annotation2 = Annotation.secondary(0, Span.init(11, 24)).withLabel("something else");
+            const annotation3 = Annotation.secondary(0, Span.init(0, input.len - 1)).withLabel("full program");
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1, annotation2, annotation3});
 
             // 1 |   let main = 23;
             //   |  _-          -
