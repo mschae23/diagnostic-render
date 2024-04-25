@@ -670,7 +670,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
             const line_data_new_start_index: usize = final_data.items.len;
             var i: usize = 0;
 
-            const CompareAnnotationData = struct {
+            const UpperCompare = struct {
                 pub fn inner(_: void, a: LineColumn, b: AnnotationData) bool {
                     const a_start = a;
                     const b_start = switch (b) {
@@ -679,6 +679,24 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                         .connecting_singleline => |data| LineColumn.init(data.line_index, data.start_column_index),
                         else => unreachable,
                     };
+
+                    if (a_start.line_index == b_start.line_index) {
+                        return a_start.column_index < b_start.column_index;
+                    } else {
+                        return a_start.line_index < b_start.line_index;
+                    }
+                }
+            };
+
+            const LowerCompare = struct {
+                pub fn inner(_: void, a: AnnotationData, b: LineColumn) bool {
+                    const a_start = switch (a) {
+                        .start => |data| data.location,
+                        .end => |data| data.location,
+                        .connecting_singleline => |data| LineColumn.init(data.line_index, data.start_column_index),
+                        else => unreachable,
+                    };
+                    const b_start = b;
 
                     if (a_start.line_index == b_start.line_index) {
                         return a_start.column_index < b_start.column_index;
@@ -697,33 +715,33 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                 }
 
                 switch (start_end.data) {
-                    .start => |data| (try final_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.location, final_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                    .start => |data| (try final_data.insert(allocator, line_data_new_start_index + std.sort.lowerBound(AnnotationData, data.location, final_data.items[line_data_new_start_index..], {}, LowerCompare.inner),
                         AnnotationData { .start = StartAnnotationData {
                             .style = start_end.annotation.style,
                             .severity = diagnostic.severity,
                             .location = data.location,
                         }})),
-                    .end => |data| (try final_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.location, final_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                    .end => |data| (try final_data.insert(allocator, line_data_new_start_index + std.sort.lowerBound(AnnotationData, data.location, final_data.items[line_data_new_start_index..], {}, LowerCompare.inner),
                         AnnotationData { .end = EndAnnotationData {
                             .style = start_end.annotation.style,
                             .severity = diagnostic.severity,
                             .location = data.location,
                         }})),
                     .both => |data| {
-                        (try final_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.start.location, final_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                        (try final_data.insert(allocator, line_data_new_start_index + std.sort.lowerBound(AnnotationData, data.start.location, final_data.items[line_data_new_start_index..], {}, LowerCompare.inner),
                             AnnotationData { .start = StartAnnotationData {
                                 .style = start_end.annotation.style,
                                 .severity = diagnostic.severity,
                                 .location = data.start.location,
                             }}));
-                        (try final_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.start.location, final_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                        (try final_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.start.location, final_data.items[line_data_new_start_index..], {}, UpperCompare.inner),
                             AnnotationData { .connecting_singleline = ConnectingSinglelineAnnotationData {
                                 .style = start_end.annotation.style, .as_multiline = false,
                                 .severity = diagnostic.severity,
                                 .line_index = data.start.location.line_index,
                                 .start_column_index = data.start.location.column_index, .end_column_index = data.end.location.column_index,
                             }}));
-                        (try final_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.end.location, final_data.items[line_data_new_start_index..], {}, CompareAnnotationData.inner),
+                        (try final_data.insert(allocator, line_data_new_start_index + std.sort.upperBound(AnnotationData, data.end.location, final_data.items[line_data_new_start_index..], {}, UpperCompare.inner),
                             AnnotationData { .end = EndAnnotationData {
                                 .style = start_end.annotation.style,
                                 .severity = diagnostic.severity,
