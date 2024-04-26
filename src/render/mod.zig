@@ -58,17 +58,11 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
         }
 
         /// Renders the given diagnostics.
-        ///
-        /// Consider the renderer deinitialized after this call.
         pub fn render(self: *Self, diagnostics: []const Diagnostic(FileId)) anyerror!void {
             if (diagnostics.len == 0) {
                 return;
             }
 
-            return self.renderImpl(diagnostics);
-        }
-
-        fn renderImpl(self: *Self, diagnostics: []const Diagnostic(FileId)) anyerror!void {
             var self2 = self;
             var i: usize = 0;
 
@@ -88,7 +82,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             }
         }
 
-        fn renderDiagnostic(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId)) anyerror!void {
+        pub fn renderDiagnostic(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId)) anyerror!void {
             try self.renderDiagnosticHeader(diagnostic);
 
             if (diagnostic.annotations.len != 0) {
