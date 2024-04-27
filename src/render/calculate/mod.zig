@@ -413,7 +413,8 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                             vertical_offsets.items[i].label += ending_label_offset;
                         }
 
-                        ending_label_offset += std.mem.count(u8, std.mem.trim(u8, start_end.annotation.label, &.{'\n'}), "\n");
+                        // TODO Find out whether this is needed; it certainly was needed at some point, but it breaks test/two/multiline_multiline/5/labelled_multiline
+                        // ending_label_offset += std.mem.count(u8, std.mem.trim(u8, start_end.annotation.label, &.{'\n'}), "\n");
                     }
                 },
                 .both => |data| {
@@ -832,6 +833,10 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                     .label = label,
                 }};
 
+                if (first_line_end == null) {
+                    rest_label = null;
+                }
+
                 found = true;
                 break;
             }
@@ -853,6 +858,10 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                         .location = data.location,
                         .label = label,
                     }};
+
+                    if (line_end == null) {
+                        rest_label = null;
+                    }
                 }
             }
         }

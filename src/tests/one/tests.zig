@@ -598,3 +598,84 @@ pub const multiline = struct {
         );
     }
 };
+
+pub const note = struct {
+    test "1, labelled" {
+        try runTest("src/path/to/file.something", fibonacci_input, &.{
+            Diagnostic.err().withName("test/one/note/1/labelled").withMessage("Test message").withAnnotations(&.{
+                Annotation.primary(0, Span.init(0, 3)).withLabel("annotation 1"),
+            }).withNotes(&.{
+                Note.help("this is a test note"),
+            })
+        },
+        \\error[test/one/note/1/labelled]: Test message
+        \\ --> src/path/to/file.something:1:1
+        \\1 | pub fn fibonacci(n: i32) -> u64 {
+        \\  | ^^^ annotation 1
+        \\2 |     if n < 0 {
+        \\  = help: this is a test note
+        \\
+        );
+    }
+
+    test "1, labelled multiline" {
+        try runTest("src/path/to/file.something", fibonacci_input, &.{
+            Diagnostic.err().withName("test/one/note/1/labelled_multiline").withMessage("Test message").withAnnotations(&.{
+                Annotation.primary(0, Span.init(0, 3)).withLabel("annotation 1"),
+            }).withNotes(&.{
+                Note.help("this is a test note\nsecond line"),
+            })
+        },
+        \\error[test/one/note/1/labelled_multiline]: Test message
+        \\ --> src/path/to/file.something:1:1
+        \\1 | pub fn fibonacci(n: i32) -> u64 {
+        \\  | ^^^ annotation 1
+        \\2 |     if n < 0 {
+        \\  = help: this is a test note
+        \\          second line
+        \\
+        );
+    }
+
+    test "2, labelled" {
+        try runTest("src/path/to/file.something", fibonacci_input, &.{
+            Diagnostic.err().withName("test/one/note/2/labelled").withMessage("Test message").withAnnotations(&.{
+                Annotation.primary(0, Span.init(0, 3)).withLabel("annotation 1"),
+            }).withNotes(&.{
+                Note.help("this is a test note"),
+                Note.note("this is another note"),
+            })
+        },
+        \\error[test/one/note/2/labelled]: Test message
+        \\ --> src/path/to/file.something:1:1
+        \\1 | pub fn fibonacci(n: i32) -> u64 {
+        \\  | ^^^ annotation 1
+        \\2 |     if n < 0 {
+        \\  = help: this is a test note
+        \\  = note: this is another note
+        \\
+        );
+    }
+
+    test "2, labelled multiline" {
+        try runTest("src/path/to/file.something", fibonacci_input, &.{
+            Diagnostic.err().withName("test/one/note/2/labelled_multiline").withMessage("Test message").withAnnotations(&.{
+                Annotation.primary(0, Span.init(0, 3)).withLabel("annotation 1"),
+            }).withNotes(&.{
+                Note.help("this is a test note\nsecond line"),
+                Note.note("this is another note\nfourth line"),
+            })
+        },
+        \\error[test/one/note/2/labelled_multiline]: Test message
+        \\ --> src/path/to/file.something:1:1
+        \\1 | pub fn fibonacci(n: i32) -> u64 {
+        \\  | ^^^ annotation 1
+        \\2 |     if n < 0 {
+        \\  = help: this is a test note
+        \\          second line
+        \\  = note: this is another note
+        \\          fourth line
+        \\
+        );
+    }
+};

@@ -206,6 +206,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 }
 
                 try self.writer.writeAll(note.message[start..end]);
+                try self.writer.writeByte('\n');
             }
         }
 

@@ -42,5 +42,6 @@ test "footer 1" {
     \\warning[test/diagnostic_2]: Test message
     \\ = note: This is a test note.
     \\         Yes.
+    \\
     );
 }
