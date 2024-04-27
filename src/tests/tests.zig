@@ -229,6 +229,7 @@ pub const output = struct {
     pub const zero = @import("./zero/tests.zig");
     pub const one = @import("./one/tests.zig");
     pub const two = @import("./two/tests.zig");
+    pub const three = @import("./three/tests.zig");
 };
 
 test {

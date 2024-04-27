@@ -417,6 +417,10 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                     }
                 },
                 .both => |data| {
+                    if (ending_label_offset == 0) {
+                        ending_label_offset = @max(1, std.mem.count(u8, std.mem.trim(u8, start_end.annotation.label, &.{'\n'}), "\n"));
+                    }
+
                     if (annotation.label.len == 0) {
                         // A single-line annotation without a label doesn't take space.
 
