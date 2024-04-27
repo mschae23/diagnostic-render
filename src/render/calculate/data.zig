@@ -15,12 +15,24 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
+const file = @import("../../file.zig");
 const diag = @import("../../diagnostic.zig");
 const Diagnostic = diag.Diagnostic;
 const Annotation = diag.Annotation;
 const AnnotationStyle = diag.AnnotationStyle;
 const Severity = diag.Severity;
-const LineColumn = @import("../../file.zig").LineColumn;
+const LineColumn = file.LineColumn;
+
+/// Tuple of a pointer to an [annotation] and an optional vertical bar index, to be passed to the internal
+/// calculate function.
+///
+/// [annotation]: Annotation
+pub fn ActiveAnnotation(comptime FileId: type) type {
+    return struct {
+        annotation: *const Annotation(FileId),
+        vertical_bar_index: ?usize,
+    };
+}
 
 /// Data for a continuing multi-line annotation. This is an annotation that starts
 /// on a line before the currently rendered one, and ends after it.

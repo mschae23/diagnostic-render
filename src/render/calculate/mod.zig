@@ -23,6 +23,7 @@ const Diagnostic = diag.Diagnostic;
 const Annotation = diag.Annotation;
 
 const calculate_data = @import("./data.zig");
+pub const ActiveAnnotation = calculate_data.ActiveAnnotation;
 pub const ContinuingMultilineAnnotationData = calculate_data.ContinuingMultilineAnnotationData;
 pub const ConnectingMultilineAnnotationData = calculate_data.ConnectingMultilineAnnotationData;
 pub const StartAnnotationData = calculate_data.StartAnnotationData;
@@ -38,6 +39,7 @@ pub fn StartEnd(comptime FileId: type) type {
     return struct {
         annotation: *const Annotation(FileId),
         data: StartEndAnnotationData,
+        vertical_bar_index: ?usize,
     };
 }
 
@@ -48,8 +50,8 @@ pub const VerticalOffset = struct {
 
 pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), files: *file.Files(FileId),
     file_id: FileId, line_index: usize, tab_length: usize,
-    continuing_annotations: []const *const Annotation(FileId),
-    active_annotations: []const *const Annotation(FileId)) anyerror!std.ArrayListUnmanaged(AnnotationData) {
+    continuing_annotations: []const ?*const Annotation(FileId),
+    active_annotations: []const ActiveAnnotation(FileId)) anyerror!std.ArrayListUnmanaged(AnnotationData) {
     var starts_ends = try std.ArrayListUnmanaged(StartEnd(FileId)).initCapacity(allocator, active_annotations.len);
     defer starts_ends.deinit(allocator);
 
@@ -58,8 +60,8 @@ pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic
 
         while (i < active_annotations.len) : (i += 1) {
             const annotation = active_annotations[i];
-            const start = try files.lineColumn(file_id, annotation.range.start, .inclusive, tab_length) orelse unreachable;
-            const end = try files.lineColumn(file_id, annotation.range.end, .exclusive, tab_length) orelse unreachable;
+            const start = try files.lineColumn(file_id, annotation.annotation.range.start, .inclusive, tab_length) orelse unreachable;
+            const end = try files.lineColumn(file_id, annotation.annotation.range.end, .exclusive, tab_length) orelse unreachable;
 
              // Either start or end has to match line_index
              var start_part: ?StartAnnotationData = null;
@@ -67,7 +69,7 @@ pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic
 
              if (start.line_index == line_index) {
                 start_part = StartAnnotationData {
-                    .style = annotation.style,
+                    .style = annotation.annotation.style,
                     .severity = diagnostic.severity,
                     .location = start,
                 };
@@ -75,7 +77,7 @@ pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic
 
              if (end.line_index == line_index) {
                 end_part = EndAnnotationData {
-                    .style = annotation.style,
+                    .style = annotation.annotation.style,
                     .severity = diagnostic.severity,
                     .location = end,
                 };
@@ -85,21 +87,24 @@ pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic
 
              if (start_part != null and end_part != null) {
                 start_end = StartEnd(FileId) {
-                    .annotation = annotation,
+                    .annotation = annotation.annotation,
                     .data = StartEndAnnotationData { .both = BothAnnotationData {
                         .start = start_part.?,
                         .end = end_part.?,
                     }},
+                    .vertical_bar_index = annotation.vertical_bar_index,
                 };
              } else if (start_part) |start_data| {
                 start_end = StartEnd(FileId) {
-                    .annotation = annotation,
+                    .annotation = annotation.annotation,
                     .data = StartEndAnnotationData { .start = start_data },
+                    .vertical_bar_index = annotation.vertical_bar_index,
                 };
              } else if (end_part) |end_data| {
                  start_end = StartEnd(FileId) {
-                    .annotation = annotation,
+                    .annotation = annotation.annotation,
                     .data = StartEndAnnotationData { .end = end_data },
+                    .vertical_bar_index = annotation.vertical_bar_index,
                 };
              } else {
                 std.debug.panic("Annotation neither starts nor ends in this line, despite previous check", .{});
@@ -520,7 +525,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
 pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), files: *file.Files(FileId),
     file_id: FileId, line_index: usize, tab_length: usize,
     starts_ends: []const StartEnd(FileId), vertical_offsets: []const VerticalOffset,
-    continuing_annotations: []const *const Annotation(FileId)) anyerror!std.ArrayListUnmanaged(AnnotationData) {
+    continuing_annotations: []const ?*const Annotation(FileId)) anyerror!std.ArrayListUnmanaged(AnnotationData) {
     _ = tab_length;
 
     // std.debug.print("[debug] Vertical offsets: {any}\n", .{vertical_offsets});
@@ -537,7 +542,7 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
         var i: usize = 0;
 
         while (i < continuing_annotations.len) : (i += 1) {
-            const start_line_index = try files.lineIndex(file_id, continuing_annotations[i].range.start, .inclusive) orelse unreachable;
+            const start_line_index = try files.lineIndex(file_id, continuing_annotations[i].annotation.range.start, .inclusive) orelse unreachable;
 
             // Once we reach a continuing annotation that started on this line,
             // all the ones after it in the vector should start later too, so we can stop here.

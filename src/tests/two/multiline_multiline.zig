@@ -746,7 +746,8 @@ test "10, unlabelled" {
 }
 
 test "11, labelled" {
-    // TODO Allow connecting to other continuing annotations, keep rendering continuing data on only index 1
+    // TODO Reproducable bug
+    //      Allow connecting to other continuing annotations, keep rendering continuing data on only index 1
 
     try runTest("src/path/to/file.something", fibonacci_input, &.{
         Diagnostic.err().withName("test/two/multiline_multiline/11/labelled").withMessage("Test message").withAnnotations(&.{

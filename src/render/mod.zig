@@ -25,6 +25,7 @@ const Diagnostic = diag.Diagnostic;
 const Annotation = diag.Annotation;
 const ColorConfig = @import("../ColorConfig.zig");
 const calculate = @import("./calculate/mod.zig");
+const ActiveAnnotation = @import("./calculate/data.zig").ActiveAnnotation;
 
 /// Contains some configuration parameters for [`DiagnosticRenderer`].
 ///
@@ -286,6 +287,15 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             const last_line_index_in_file = try self.files.getLastLineIndex(file_id) orelse unreachable;
             var should_continue = true;
 
+            var continuing_annotations = try diagnostic_allocator.alloc(?*const Annotation(FileId), self.max_nested_blocks);
+            defer diagnostic_allocator.free(continuing_annotations);
+
+            for (continuing_annotations) |*item| {
+                item.* = null;
+            }
+
+            var next_continuing_index: usize = 0;
+
             var line_allocator = std.heap.ArenaAllocator.init(diagnostic_allocator);
             defer line_allocator.deinit();
             const allocator = line_allocator.allocator();
@@ -298,9 +308,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 defer _ = line_allocator.reset(.retain_capacity);
                 should_continue = false;
 
-                var continuing_annotations = try std.ArrayListUnmanaged(*const Annotation(FileId)).initCapacity(allocator, 0);
-                defer continuing_annotations.deinit(allocator);
-                var active_annotations = try std.ArrayListUnmanaged(*const Annotation(FileId)).initCapacity(allocator, 0);
+                var active_annotations = try std.ArrayListUnmanaged(ActiveAnnotation(FileId)).initCapacity(allocator, 0);
                 defer active_annotations.deinit(allocator);
 
                 var i: usize = 0;
@@ -314,7 +322,10 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                         should_continue = true;
                         break;
                     } else if (start_line_index < current_line_index and end_line_index > current_line_index) {
-                        (try continuing_annotations.addOne(allocator)).* = annotation;
+                        std.debug.assert(next_continuing_index < continuing_annotations.len);
+
+                        continuing_annotations[next_continuing_index] = annotation;
+                        next_continuing_index += 1;
                         should_continue = true;
                         continue;
                     } else if (start_line_index != current_line_index and end_line_index != current_line_index) {
@@ -322,14 +333,20 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     }
 
                     if (start_line_index < current_line_index) {
-                        (try continuing_annotations.addOne(allocator)).* = annotation;
+                        std.debug.assert(next_continuing_index < continuing_annotations.len);
+
+                        continuing_annotations[next_continuing_index] = annotation;
+                        next_continuing_index += 1;
                     }
 
                     if (end_line_index > current_line_index) {
                         should_continue = true;
                     }
 
-                    (try active_annotations.addOne(allocator)).* = annotation;
+                    (try active_annotations.addOne(allocator)).* = .{
+                        .annotation = annotation,
+                        .vertical_bar_index = if (start_line_index < current_line_index) next_continuing_index - 1 else null,
+                    };
                 }
 
                 if (active_annotations.items.len != 0) {
@@ -346,7 +363,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             }
         }
 
-        fn renderPostSurroundingLines(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, main_line: usize, last_line: usize, continuing_annotations: []const *const Annotation(FileId), already_printed_end_line_index: *usize) anyerror!void {
+        fn renderPostSurroundingLines(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, main_line: usize, last_line: usize, continuing_annotations: []const ?*const Annotation(FileId), already_printed_end_line_index: *usize) anyerror!void {
             // std.debug.print("[debug] potentially printing post surrounding lines, last line: {}, already printed to: {}\n", .{last_line, already_printed_to.*});
 
             if (last_line + 1 >= already_printed_end_line_index.*) {
@@ -366,9 +383,9 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             }
         }
 
-        fn renderPartLines(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, current_line_index: usize, last_line_index: ?usize, continuing_annotations: std.ArrayListUnmanaged(*const Annotation(FileId)), active_annotations: std.ArrayListUnmanaged(*const Annotation(FileId)), already_printed_end_line_index: *usize) anyerror!void {
+        fn renderPartLines(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, current_line_index: usize, last_line_index: ?usize, continuing_annotations: []const ?*const Annotation(FileId), active_annotations: std.ArrayListUnmanaged(ActiveAnnotation(FileId)), already_printed_end_line_index: *usize) anyerror!void {
             if (last_line_index) |last_line| {
-                try self.renderPostSurroundingLines(allocator, diagnostic, file_id, current_line_index, last_line, continuing_annotations.items, already_printed_end_line_index);
+                try self.renderPostSurroundingLines(allocator, diagnostic, file_id, current_line_index, last_line, continuing_annotations, already_printed_end_line_index);
             }
 
             const first_print_line_index = @max(current_line_index -| self.config.surrounding_lines, already_printed_end_line_index.*);
@@ -377,18 +394,18 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             // std.debug.print("[debug] current line ({}); first = {}, last = {}, already end = {}\n", .{current_line_index, first_print_line_index, last_print_line_index, already_printed_end_line_index.*});
 
             if (first_print_line_index != 0 and already_printed_end_line_index.* != 0 and first_print_line_index > already_printed_end_line_index.*) {
-                try self.writeSourceLine(allocator, diagnostic, file_id, null, .ellipsis, continuing_annotations.items);
+                try self.writeSourceLine(allocator, diagnostic, file_id, null, .ellipsis, continuing_annotations);
             }
 
             var line: usize = first_print_line_index;
 
             while (line <= last_print_line_index) : (line += 1) {
-                try self.renderLine(allocator, diagnostic, file_id, line, current_line_index, &continuing_annotations, &active_annotations);
+                try self.renderLine(allocator, diagnostic, file_id, line, current_line_index, continuing_annotations, &active_annotations);
                 already_printed_end_line_index.* = line + 1;
             }
         }
 
-        fn writeSourceLine(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: ?usize, separator: LineNumberSeparator, continuing_annotations: []const *const Annotation(FileId)) anyerror!void {
+        fn writeSourceLine(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: ?usize, separator: LineNumberSeparator, continuing_annotations: []const ?*const Annotation(FileId)) anyerror!void {
             const line_number: ?usize = if (line_index) |line| block: {
                 break :block self.files.lineNumber(file_id, line);
             } else block: {
@@ -397,23 +414,27 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
             try self.writeLineNumber(line_number, separator);
 
-            var requires_space = separator == .pipe or separator == .note;
+            var required_spaces: usize = @intFromBool(separator == .pipe or separator == .note);
 
             {
                 var i: usize = 0;
 
                 while (i < continuing_annotations.len) : (i += 1) {
-                    const annotation = continuing_annotations[i];
+                    const a = continuing_annotations[i];
 
-                    if (requires_space) {
-                        try self.writer.writeByte(' ');
+                    if (a) |annotation| {
+                        if (required_spaces != 0) {
+                            try self.writer.writeByteNTimes(' ', required_spaces);
+                        }
+
+                        try self.config.colors.writeAnnotation(self.colors, self.writer, annotation.style, diagnostic.severity);
+                        try self.writer.writeByte('|');
+                        try self.config.colors.writeReset(self.colors, self.writer);
+
+                        required_spaces = 1;
+                    } else {
+                        required_spaces += 2;
                     }
-
-                    try self.config.colors.writeAnnotation(self.colors, self.writer, annotation.style, diagnostic.severity);
-                    try self.writer.writeByte('|');
-                    try self.config.colors.writeReset(self.colors, self.writer);
-
-                    requires_space = true;
                 }
             }
 
@@ -423,7 +444,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 const line_range = try self.files.lineRange(file_id, line) orelse unreachable;
 
                 if (line_range.end != line_range.start) {
-                    try self.writer.writeByteNTimes(' ', 2 * (self.max_nested_blocks - continuing_annotations.len) + @intFromBool(requires_space));
+                    try self.writer.writeByteNTimes(' ', required_spaces);
                     try seeker.seekTo(@as(u64, line_range.start));
 
                     // UTF-8 decoding is implemented as specified in https://encoding.spec.whatwg.org/#utf-8-decoder.
@@ -581,8 +602,8 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             try self.writer.writeByte('\n');
         }
 
-        fn renderLine(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, main_line_index: usize, continuing_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId)), active_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {
-            try self.writeSourceLine(allocator, diagnostic, file_id, line_index, .pipe, continuing_annotations.items);
+        fn renderLine(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, main_line_index: usize, continuing_annotations: []const ?*const Annotation(FileId), active_annotations: *const std.ArrayListUnmanaged(ActiveAnnotation(FileId))) anyerror!void {
+            try self.writeSourceLine(allocator, diagnostic, file_id, line_index, .pipe, continuing_annotations);
 
             if (line_index != main_line_index or active_annotations.items.len == 0) {
                 return;
@@ -591,8 +612,8 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             return self.renderLineAnnotations(allocator, diagnostic, file_id, line_index, continuing_annotations, active_annotations);
         }
 
-        fn renderLineAnnotations(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, continuing_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId)), active_annotations: *const std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {
-            var annotation_data = try calculate.calculate(FileId, allocator, diagnostic, self.files, file_id, line_index, self.config.tab_length, continuing_annotations.items, active_annotations.items);
+        fn renderLineAnnotations(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, continuing_annotations: []const ?*const Annotation(FileId), active_annotations: *const std.ArrayListUnmanaged(ActiveAnnotation(FileId))) anyerror!void {
+            var annotation_data = try calculate.calculate(FileId, allocator, diagnostic, self.files, file_id, line_index, self.config.tab_length, continuing_annotations, active_annotations.items);
             defer annotation_data.deinit(allocator);
 
             const ConnectingData = struct {
