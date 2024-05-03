@@ -25,7 +25,7 @@ const Diagnostic = diag.Diagnostic;
 const Annotation = diag.Annotation;
 const ColorConfig = @import("../ColorConfig.zig");
 const calculate = @import("./calculate/mod.zig");
-const ActiveAnnotation = @import("./calculate/data.zig").ActiveAnnotation;
+const LocatedAnnotation = @import("./calculate/data.zig").LocatedAnnotation;
 
 /// Contains some configuration parameters for [`DiagnosticRenderer`].
 ///
@@ -64,7 +64,6 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 return;
             }
 
-            var self2 = self;
             var i: usize = 0;
 
             var diagnostic_allocator = std.heap.ArenaAllocator.init(self.global_allocator);
@@ -75,10 +74,10 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 defer _ = diagnostic_allocator.reset(.retain_capacity);
 
                 const diagnostic = &diagnostics[i];
-                try self2.renderDiagnostic(allocator, diagnostic);
+                try self.renderDiagnostic(allocator, diagnostic);
 
                 if (i < diagnostics.len - 1) {
-                    try self2.writer.writeByte('\n');
+                    try self.writer.writeByte('\n');
                 }
             }
         }
@@ -87,7 +86,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             try self.renderDiagnosticHeader(diagnostic);
 
             if (diagnostic.annotations.len != 0) {
-                var annotations_by_file = std.AutoArrayHashMap(FileId, std.ArrayListUnmanaged(*const Annotation(FileId))).init(allocator);
+                var annotations_by_file = std.AutoArrayHashMap(FileId, std.ArrayListUnmanaged(LocatedAnnotation(FileId))).init(allocator);
 
                 defer {
                     const values = annotations_by_file.values();
@@ -108,17 +107,27 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
                     if (!entry.found_existing) {
                         errdefer _ = annotations_by_file.orderedRemove(annotation.file_id);
-                        entry.value_ptr.* = try std.ArrayListUnmanaged(*const Annotation(FileId)).initCapacity(allocator, 1);
+                        entry.value_ptr.* = try std.ArrayListUnmanaged(LocatedAnnotation(FileId)).initCapacity(allocator, 1);
                     }
 
-                    try entry.value_ptr.insert(allocator, std.sort.upperBound(*const Annotation(FileId), annotation, entry.value_ptr.items, {}, struct {
-                        pub fn inner(_: void, a: *const Annotation(FileId), b: *const Annotation(FileId)) bool {
-                            return a.range.start < b.range.start;
-                        }
-                    }.inner), annotation);
+                    const start_location = try self.files.lineColumn(annotation.file_id, annotation.range.start, .inclusive, self.config.tab_length) orelse return error.FileNotFound;
+                    const end_location = try self.files.lineColumn(annotation.file_id, annotation.range.end, .exclusive, self.config.tab_length) orelse unreachable;
 
-                    const line_index = (try self.files.lineIndex(annotation.file_id, annotation.range.end, .exclusive)) orelse return error.FileNotFound;
-                    const line_number = self.files.lineNumber(annotation.file_id, line_index);
+                    const located_annotation = LocatedAnnotation(FileId) {
+                        .annotation = annotation,
+                        // Can't be determined at this stage
+                        .vertical_bar_index = null,
+                        .start_location = start_location,
+                        .end_location = end_location,
+                    };
+
+                    try entry.value_ptr.insert(allocator, std.sort.upperBound(LocatedAnnotation(FileId), located_annotation, entry.value_ptr.items, {}, struct {
+                        pub fn inner(_: void, a: LocatedAnnotation(FileId), b: LocatedAnnotation(FileId)) bool {
+                            return a.annotation.range.start < b.annotation.range.start;
+                        }
+                    }.inner), located_annotation);
+
+                    const line_number = self.files.lineNumber(annotation.file_id, end_location.line_index);
                     max_line_number = @max(max_line_number, line_number);
                 }
 
@@ -211,7 +220,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             }
         }
 
-        fn renderDiagnosticFile(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, annotations: *std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {
+        fn renderDiagnosticFile(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, annotations: *std.ArrayListUnmanaged(LocatedAnnotation(FileId))) anyerror!void {
             var location: usize = 0;
 
             {
@@ -220,11 +229,11 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 while (i < annotations.items.len) : (i += 1) {
                     const annotation = annotations.items[i];
 
-                    if (annotation.style == .primary) {
-                        location = annotation.range.start;
+                    if (annotation.annotation.style == .primary) {
+                        location = annotation.annotation.range.start;
                         break;
                     } else if (i == 0) {
-                        location = annotation.range.start;
+                        location = annotation.annotation.range.start;
                     }
                 }
             }
@@ -243,33 +252,60 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
 
             {
                 var max_nested_blocks: usize = 0;
-                var current_nested_blocks = try std.ArrayListUnmanaged(usize).initCapacity(allocator, 0);
-                defer current_nested_blocks.deinit(allocator);
+                var current_nested_blocks = std.SinglyLinkedList(*LocatedAnnotation(FileId)) {};
+                errdefer {
+                    while (current_nested_blocks.popFirst()) |node| {
+                        allocator.destroy(node);
+                    }
+                }
 
-                for (annotations.items) |annotation| {
-                    const start_line_index = try self.files.lineIndex(file_id, annotation.range.start, .inclusive) orelse unreachable;
-                    const end_line_index = try self.files.lineIndex(file_id, annotation.range.end, .exclusive) orelse unreachable;
+                var count_nested_blocks: usize = 0;
+                var next_vertical_bar_index: usize = 0;
+
+                for (annotations.items) |*annotation| {
+                    const start_line_index = annotation.start_location.line_index;
+                    const end_line_index = annotation.end_location.line_index;
 
                     if (start_line_index == end_line_index) {
                         continue;
                     }
 
                     {
-                        var i: usize = 0;
+                        var prev: ?*@TypeOf(current_nested_blocks).Node = null;
+                        var next = current_nested_blocks.first;
 
-                        while (i < current_nested_blocks.items.len) {
-                            if (current_nested_blocks.items[i] <= start_line_index) {
-                                // Order of current_nested_blocks doesn't matter, only how many items are in it at the same time
-                                _ = current_nested_blocks.swapRemove(i);
-                                continue;
+                        while (next) |node| {
+                            if (node.data.end_location.line_index <= start_line_index) {
+                                defer allocator.destroy(node);
+
+                                if (prev) |p| {
+                                    p.next = node.next;
+                                } else {
+                                    current_nested_blocks.first = node.next;
+
+                                    if (node.next) |new_first| {
+                                        next_vertical_bar_index = new_first.data.vertical_bar_index.? + 1;
+                                    } else {
+                                        next_vertical_bar_index = 0;
+                                    }
+                                }
+
+                                count_nested_blocks -= 1;
                             }
 
-                            i += 1;
+                            prev = node;
+                            next = node.next;
                         }
                     }
 
-                    (try current_nested_blocks.addOne(allocator)).* = end_line_index;
-                    max_nested_blocks = @max(max_nested_blocks, current_nested_blocks.items.len);
+                    annotation.vertical_bar_index = next_vertical_bar_index;
+                    var node = try allocator.create(@TypeOf(current_nested_blocks).Node);
+                    node.data = annotation;
+                    current_nested_blocks.prepend(node);
+                    count_nested_blocks += 1;
+                    next_vertical_bar_index += 1;
+
+                    max_nested_blocks = @max(max_nested_blocks, count_nested_blocks);
                 }
 
                 self.max_nested_blocks = max_nested_blocks;
@@ -279,22 +315,17 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             return self.renderLinesWithAnnotations(allocator, diagnostic, file_id, annotations);
         }
 
-        fn renderLinesWithAnnotations(self: *Self, diagnostic_allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, annotations: *std.ArrayListUnmanaged(*const Annotation(FileId))) anyerror!void {
-            var current_line_index: usize = try self.files.lineIndex(file_id, annotations.items[0].range.start, .inclusive) orelse unreachable;
+        fn renderLinesWithAnnotations(self: *Self, diagnostic_allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, annotations: *std.ArrayListUnmanaged(LocatedAnnotation(FileId))) anyerror!void {
+            var current_line_index: usize = try self.files.lineIndex(file_id, annotations.items[0].annotation.range.start, .inclusive) orelse unreachable;
             var last_line_index: ?usize = null;
             var already_printed_end_line_index: usize = 0;
 
             const last_line_index_in_file = try self.files.getLastLineIndex(file_id) orelse unreachable;
             var should_continue = true;
 
-            var continuing_annotations = try diagnostic_allocator.alloc(?*const Annotation(FileId), self.max_nested_blocks);
+            const continuing_annotations = try diagnostic_allocator.alloc(?*const Annotation(FileId), self.max_nested_blocks);
             defer diagnostic_allocator.free(continuing_annotations);
-
-            for (continuing_annotations) |*item| {
-                item.* = null;
-            }
-
-            var next_continuing_index: usize = 0;
+            @memset(continuing_annotations, null);
 
             var line_allocator = std.heap.ArenaAllocator.init(diagnostic_allocator);
             defer line_allocator.deinit();
@@ -308,57 +339,57 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                 defer _ = line_allocator.reset(.retain_capacity);
                 should_continue = false;
 
-                var active_annotations = try std.ArrayListUnmanaged(ActiveAnnotation(FileId)).initCapacity(allocator, 0);
+                var active_annotations = try std.ArrayListUnmanaged(LocatedAnnotation(FileId)).initCapacity(allocator, 0);
                 defer active_annotations.deinit(allocator);
 
                 var i: usize = 0;
 
                 while (i < annotations.items.len) : (i += 1) {
                     const annotation = annotations.items[i];
-                    const start_line_index = try self.files.lineIndex(file_id, annotation.range.start, .inclusive) orelse unreachable;
-                    const end_line_index = try self.files.lineIndex(file_id, annotation.range.end, .exclusive) orelse unreachable;
+                    const start_line_index = annotation.start_location.line_index;
+                    const end_line_index = annotation.end_location.line_index;
 
                     if (start_line_index > current_line_index) {
                         should_continue = true;
                         break;
                     } else if (start_line_index < current_line_index and end_line_index > current_line_index) {
-                        std.debug.assert(next_continuing_index < continuing_annotations.len);
-
-                        continuing_annotations[next_continuing_index] = annotation;
-                        next_continuing_index += 1;
                         should_continue = true;
                         continue;
                     } else if (start_line_index != current_line_index and end_line_index != current_line_index) {
                         continue;
                     }
 
-                    if (start_line_index < current_line_index) {
-                        std.debug.assert(next_continuing_index < continuing_annotations.len);
-
-                        continuing_annotations[next_continuing_index] = annotation;
-                        next_continuing_index += 1;
-                    }
-
                     if (end_line_index > current_line_index) {
                         should_continue = true;
                     }
 
-                    (try active_annotations.addOne(allocator)).* = .{
-                        .annotation = annotation,
-                        .vertical_bar_index = if (start_line_index < current_line_index) next_continuing_index - 1 else null,
-                    };
+                    (try active_annotations.addOne(allocator)).* = annotation;
                 }
 
                 if (active_annotations.items.len != 0) {
                     try self.renderPartLines(allocator, diagnostic, file_id, current_line_index, last_line_index,
                         continuing_annotations, active_annotations, &already_printed_end_line_index);
+
+                    const end = i;
+                    i = 0;
+
+                    while (i < end) : (i += 1) {
+                        const annotation = annotations.items[i];
+
+                        if (annotation.start_location.line_index == current_line_index and annotation.end_location.line_index > current_line_index) {
+                            continuing_annotations[annotation.vertical_bar_index.?] = annotation.annotation;
+                        } else if (annotation.start_location.line_index < current_line_index and annotation.end_location.line_index == current_line_index) {
+                            continuing_annotations[annotation.vertical_bar_index.?] = null;
+                        }
+                    }
+
                     last_line_index = current_line_index;
                 }
             }
 
             if (last_line_index) |last_line| {
                 if (last_line <= last_line_index_in_file) {
-                    try self.renderPostSurroundingLines(diagnostic_allocator, diagnostic, file_id, last_line_index_in_file + 1, last_line, &.{}, &already_printed_end_line_index);
+                    try self.renderPostSurroundingLines(diagnostic_allocator, diagnostic, file_id, last_line_index_in_file + 1, last_line, continuing_annotations, &already_printed_end_line_index);
                 }
             }
         }
@@ -383,7 +414,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             }
         }
 
-        fn renderPartLines(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, current_line_index: usize, last_line_index: ?usize, continuing_annotations: []const ?*const Annotation(FileId), active_annotations: std.ArrayListUnmanaged(ActiveAnnotation(FileId)), already_printed_end_line_index: *usize) anyerror!void {
+        fn renderPartLines(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, current_line_index: usize, last_line_index: ?usize, continuing_annotations: []?*const Annotation(FileId), active_annotations: std.ArrayListUnmanaged(LocatedAnnotation(FileId)), already_printed_end_line_index: *usize) anyerror!void {
             if (last_line_index) |last_line| {
                 try self.renderPostSurroundingLines(allocator, diagnostic, file_id, current_line_index, last_line, continuing_annotations, already_printed_end_line_index);
             }
@@ -400,7 +431,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             var line: usize = first_print_line_index;
 
             while (line <= last_print_line_index) : (line += 1) {
-                try self.renderLine(allocator, diagnostic, file_id, line, current_line_index, continuing_annotations, &active_annotations);
+                try self.renderLine(allocator, diagnostic, file_id, line, current_line_index, continuing_annotations, active_annotations.items);
                 already_printed_end_line_index.* = line + 1;
             }
         }
@@ -602,18 +633,20 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
             try self.writer.writeByte('\n');
         }
 
-        fn renderLine(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, main_line_index: usize, continuing_annotations: []const ?*const Annotation(FileId), active_annotations: *const std.ArrayListUnmanaged(ActiveAnnotation(FileId))) anyerror!void {
+        fn renderLine(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, main_line_index: usize, continuing_annotations: []?*const Annotation(FileId), active_annotations: []const LocatedAnnotation(FileId)) anyerror!void {
             try self.writeSourceLine(allocator, diagnostic, file_id, line_index, .pipe, continuing_annotations);
 
-            if (line_index != main_line_index or active_annotations.items.len == 0) {
+            if (line_index != main_line_index or active_annotations.len == 0) {
                 return;
             }
 
             return self.renderLineAnnotations(allocator, diagnostic, file_id, line_index, continuing_annotations, active_annotations);
         }
 
-        fn renderLineAnnotations(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, continuing_annotations: []const ?*const Annotation(FileId), active_annotations: *const std.ArrayListUnmanaged(ActiveAnnotation(FileId))) anyerror!void {
-            var annotation_data = try calculate.calculate(FileId, allocator, diagnostic, self.files, file_id, line_index, self.config.tab_length, continuing_annotations, active_annotations.items);
+        fn renderLineAnnotations(self: *Self, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), file_id: FileId, line_index: usize, continuing_annotations: []?*const Annotation(FileId), active_annotations: []const LocatedAnnotation(FileId)) anyerror!void {
+            _ = file_id;
+
+            var annotation_data = try calculate.calculate(FileId, allocator, diagnostic, line_index, continuing_annotations, active_annotations);
             defer annotation_data.deinit(allocator);
 
             const ConnectingData = struct {
@@ -646,7 +679,27 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     .continuing_multiline => |data| {
                         std.debug.assert(pre_source);
 
-                        try self.writer.writeByte(' ');
+                        if (vertical_bar_index < data.vertical_bar_index) {
+                            if (connection_stack.getLastOrNull()) |top| {
+                                try self.config.colors.writeAnnotation(self.colors, self.writer, top.style, top.severity);
+                                try self.writer.writeByteNTimes('_', 2 * (data.vertical_bar_index - vertical_bar_index) + 1);
+                                try self.config.colors.writeReset(self.colors, self.writer);
+                            } else {
+                                // Fast path for no connecting singleline data between continuing multiline data
+                                try self.writer.writeByteNTimes(' ', 2 * (data.vertical_bar_index - vertical_bar_index) + 1);
+                            }
+
+                            vertical_bar_index = data.vertical_bar_index;
+                        } else {
+                            if (connection_stack.getLastOrNull()) |top| {
+                                try self.config.colors.writeAnnotation(self.colors, self.writer, top.style, top.severity);
+                                try self.writer.writeByte('_');
+                                try self.config.colors.writeReset(self.colors, self.writer);
+                            } else {
+                                try self.writer.writeByte(' ');
+                            }
+                        }
+
                         try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
                         try self.writer.writeByte('|');
                         try self.config.colors.writeReset(self.colors, self.writer);
@@ -654,7 +707,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                         vertical_bar_index += 1;
                     },
                     .connecting_multiline => |data| {
-                        std.debug.assert(pre_source);
+                        // std.debug.assert(pre_source);
 
                         if (vertical_bar_index < data.vertical_bar_index + 1) {
                             try self.writer.writeByteNTimes(' ', 2 * (1 + data.vertical_bar_index - vertical_bar_index));
@@ -667,10 +720,10 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                             .end_location = data.end_location,
                         };
 
-                        // To get to column_index == 0
-                        try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
-                        try self.writer.writeByteNTimes('_', 2 * (self.max_nested_blocks - vertical_bar_index) + 1);
-                        pre_source = false;
+                        // // To get to column_index == 0
+                        // try self.config.colors.writeAnnotation(self.colors, self.writer, data.style, data.severity);
+                        // try self.writer.writeByteNTimes('_', 2 * (self.max_nested_blocks - vertical_bar_index) + 1);
+                        // pre_source = false;
                     },
                     .start => |data| {
                         try self.writeConnectionUpTo(ConnectingData, vertical_bar_index, &pre_source, &column_index, &connection_stack, data.location.column_index);
@@ -764,10 +817,24 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
         fn writeConnectionUpTo(self: *Self, comptime ConnectingData: type, vertical_bar_index: usize, pre_source: *bool, column_index: *usize, connection_stack: *std.ArrayListUnmanaged(ConnectingData), end_column_index: usize) anyerror!void {
             if (pre_source.*) {
                 if (vertical_bar_index < self.max_nested_blocks) {
-                    try self.writer.writeByteNTimes(' ', 2 * (self.max_nested_blocks - vertical_bar_index));
+                    if (connection_stack.getLastOrNull()) |top| {
+                        try self.config.colors.writeAnnotation(self.colors, self.writer, top.style, top.severity);
+                        try self.writer.writeByteNTimes('_', 2 * (self.max_nested_blocks - vertical_bar_index) + 1);
+                        try self.config.colors.writeReset(self.colors, self.writer);
+                    } else {
+                        // Fast path for no connecting singleline data between continuing multiline data
+                        try self.writer.writeByteNTimes(' ', 2 * (self.max_nested_blocks - vertical_bar_index) + 1);
+                    }
+                } else {
+                    if (connection_stack.getLastOrNull()) |top| {
+                        try self.config.colors.writeAnnotation(self.colors, self.writer, top.style, top.severity);
+                        try self.writer.writeByte('_');
+                        try self.config.colors.writeReset(self.colors, self.writer);
+                    } else {
+                        try self.writer.writeByte(' ');
+                    }
                 }
 
-                try self.writer.writeByte(' ');
                 pre_source.* = false;
             }
 

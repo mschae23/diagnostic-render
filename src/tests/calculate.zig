@@ -24,7 +24,7 @@ const Diagnostic = diag.Diagnostic(usize);
 const Span = diag.Span;
 
 const calculate = @import("../render/calculate/mod.zig");
-const ActiveAnnotation = calculate.ActiveAnnotation;
+const LocatedAnnotation = calculate.LocatedAnnotation;
 const ContinuingMultilineAnnotationData = calculate.ContinuingMultilineAnnotationData;
 const ConnectingMultilineAnnotationData = calculate.ConnectingMultilineAnnotationData;
 const StartAnnotationData = calculate.StartAnnotationData;
@@ -435,7 +435,7 @@ pub const vertical_offsets = struct {
 };
 
 pub const final = struct {
-    fn runTest(input: []const u8, diagnostic: *const Diagnostic, line_index: usize, continuing_annotations: []const ?*const Annotation, active_annotations: []const ActiveAnnotation(usize), expected: []const AnnotationData) !void {
+    fn runTest(input: []const u8, diagnostic: *const Diagnostic, line_index: usize, continuing_annotations: []const ?*const Annotation, active_annotations: []const LocatedAnnotation(usize), expected: []const AnnotationData) !void {
         var fbs = std.io.fixedBufferStream(input);
 
         var file_hashmap = std.AutoHashMap(usize, file.FileData).init(std.testing.allocator);
@@ -449,7 +449,7 @@ pub const final = struct {
         var files = try file.Files(usize).init(std.testing.allocator, &file_hashmap);
         defer files.deinit();
 
-        var actual = try calculate.calculate(usize, std.testing.allocator, diagnostic, &files, 0, line_index, 4, continuing_annotations, active_annotations);
+        var actual = try calculate.calculate(usize, std.testing.allocator, diagnostic, line_index, continuing_annotations, active_annotations);
         defer actual.deinit(std.testing.allocator);
 
         try std.testing.expectEqualSlices(AnnotationData, expected, actual.items);
@@ -465,7 +465,7 @@ pub const final = struct {
             // 1 | test file contents
             //   |      ^^^^ test label
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation, .vertical_bar_index = null, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation, .vertical_bar_index = null, .start_location = LineColumn.init(0, 5), .end_location = LineColumn.init(0, 8), }}, &.{
                 AnnotationData { .start = .{
                     .style = annotation.style,
                     .severity = diagnostic.severity,
@@ -508,7 +508,7 @@ pub const final = struct {
             // 2 | something += 3.0;
             //   |              --- due to this
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation1, .vertical_bar_index = null, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation1, .vertical_bar_index = null, .start_location = LineColumn.init(0, 3), .end_location = LineColumn.init(0, 12), }}, &.{
                 AnnotationData { .start = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -533,7 +533,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 1, &.{}, &.{.{ .annotation = &annotation2, .vertical_bar_index = null, }}, &.{
+            try runTest(input, &diagnostic, 1, &.{}, &.{.{ .annotation = &annotation2, .vertical_bar_index = null, .start_location = LineColumn.init(1, 13), .end_location = LineColumn.init(1, 15), }}, &.{
                 AnnotationData { .start = .{
                     .style = annotation2.style,
                     .severity = diagnostic.severity,
@@ -576,7 +576,7 @@ pub const final = struct {
             //   |     |
             //   |     identifier
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation1, .vertical_bar_index = null, }, .{ .annotation = &annotation2, .vertical_bar_index = null, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation1, .vertical_bar_index = null, .start_location = LineColumn.init(0, 11), .end_location = LineColumn.init(0, 12), }, .{ .annotation = &annotation2, .vertical_bar_index = null, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(0, 7), }}, &.{
                 AnnotationData { .start = .{
                     .style = annotation2.style,
                     .severity = diagnostic.severity,
@@ -649,7 +649,7 @@ pub const final = struct {
             //   |     |   something else
             //   |     something
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation1, .vertical_bar_index = null, }, .{ .annotation = &annotation2, .vertical_bar_index = null, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation1, .vertical_bar_index = null, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(0, 12), }, .{ .annotation = &annotation2, .vertical_bar_index = null, .start_location = LineColumn.init(0, 8), .end_location = LineColumn.init(0, 10), }}, &.{
                 AnnotationData { .start = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -733,7 +733,7 @@ pub const final = struct {
             // 2 | | something += 3.0;
             //   | |____^
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{null}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 0), .end_location = LineColumn.init(1, 3), }}, &.{
                 AnnotationData { .connecting_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -747,7 +747,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 1, &.{&annotation1}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 1, &.{&annotation1}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 0), .end_location = LineColumn.init(1, 3), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -789,12 +789,12 @@ pub const final = struct {
             //   |  ___^   -
             //   | |  _____|
             // 2 | | | something += 3.0;
-            //   | | |_____-      ^
-            //   | |_______|______|
-            //   |         |      something
-            //   |         something else
+            //   | | |____-       ^
+            //   | |______|_______|
+            //   |        |       something
+            //   |        something else
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }, .{ .annotation = &annotation2, .vertical_bar_index = 1, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{null}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 0), .end_location = LineColumn.init(1, 11), }, .{ .annotation = &annotation2, .vertical_bar_index = 1, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(1, 3), }}, &.{
                 AnnotationData { .connecting_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -830,7 +830,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 1, &.{&annotation1, &annotation2}, &.{.{ .annotation = &annotation2, .vertical_bar_index = 1, }, .{ .annotation = &annotation1, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 1, &.{&annotation1, &annotation2}, &.{.{ .annotation = &annotation2, .vertical_bar_index = 1, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(1, 3), }, .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 0), .end_location = LineColumn.init(1, 11), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -920,7 +920,7 @@ pub const final = struct {
             //   | | |_____-      ^
             //   | |______________|
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }, .{ .annotation = &annotation2, .vertical_bar_index = 1, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{null}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 0), .end_location = LineColumn.init(1, 11), }, .{ .annotation = &annotation2, .vertical_bar_index = 1, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(1, 3), }}, &.{
                 AnnotationData { .connecting_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -956,7 +956,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 1, &.{&annotation1, &annotation2}, &.{.{ .annotation = &annotation2, .vertical_bar_index = 1, }, .{ .annotation = &annotation1, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 1, &.{&annotation1, &annotation2}, &.{.{ .annotation = &annotation2, .vertical_bar_index = 1, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(1, 3), }, .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 0), .end_location = LineColumn.init(1, 11), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -1019,12 +1019,12 @@ pub const final = struct {
             //   |  ___^   -
             //   | |  _____|
             // 2 | | | something += 3.0;
-            //   | | |     ^        -
-            //   | | |_____|________|
-            //   | |_______|        something else
-            //   |         something else
+            //   | | |    ^         -
+            //   | | |____|_________|
+            //   | |______|         something else
+            //   |        something else
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }, .{ .annotation = &annotation2, .vertical_bar_index = 1, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{null, null}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 0), .end_location = LineColumn.init(1, 3), }, .{ .annotation = &annotation2, .vertical_bar_index = 1, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(1, 13), }}, &.{
                 AnnotationData { .connecting_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -1060,7 +1060,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 1, &.{&annotation1, &annotation2}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }, .{ .annotation = &annotation2, .vertical_bar_index = 1, }}, &.{
+            try runTest(input, &diagnostic, 1, &.{&annotation1, &annotation2}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 0), .end_location = LineColumn.init(1, 3), }, .{ .annotation = &annotation2, .vertical_bar_index = 1, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(1, 13), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -1161,7 +1161,7 @@ pub const final = struct {
             //   | | |_____|________|
             //   | |_______|
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }, .{ .annotation = &annotation2, .vertical_bar_index = 1, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{null, null}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 0), .end_location = LineColumn.init(1, 3), }, .{ .annotation = &annotation2, .vertical_bar_index = 1, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(1, 13), }}, &.{
                 AnnotationData { .connecting_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -1197,7 +1197,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 1, &.{&annotation1, &annotation2}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }, .{ .annotation = &annotation2, .vertical_bar_index = 1, }}, &.{
+            try runTest(input, &diagnostic, 1, &.{&annotation1, &annotation2}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 0), .end_location = LineColumn.init(1, 3), }, .{ .annotation = &annotation2, .vertical_bar_index = 1, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(1, 13), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -1283,7 +1283,7 @@ pub const final = struct {
             // 2 | | something += 3.0;
             //   | |______________^ something
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{null}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(1, 13), }}, &.{
                 AnnotationData { .connecting_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -1297,7 +1297,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 1, &.{&annotation1}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 1, &.{&annotation1}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(1, 13), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -1343,7 +1343,7 @@ pub const final = struct {
             // 2 | | something += 3.0;
             //   | |______________^ something
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation2, .vertical_bar_index = null, }, .{ .annotation = &annotation1, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{null}, &.{ .{ .annotation = &annotation2, .vertical_bar_index = null, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(0, 7), }, .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 11), .end_location = LineColumn.init(1, 13), }}, &.{
                 AnnotationData { .start = .{
                     .style = annotation2.style,
                     .severity = diagnostic.severity,
@@ -1407,7 +1407,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 1, &.{&annotation1}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 1, &.{&annotation1}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 11), .end_location = LineColumn.init(1, 13), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -1451,7 +1451,7 @@ pub const final = struct {
             // 2 | | something += 3.0;
             //   | |______________^ something
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation2, .vertical_bar_index = null, }, .{ .annotation = &annotation1, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{null}, &.{ .{ .annotation = &annotation2, .vertical_bar_index = null, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(0, 7), }, .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 11), .end_location = LineColumn.init(1, 13), }}, &.{
                 AnnotationData { .start = .{
                     .style = annotation2.style,
                     .severity = diagnostic.severity,
@@ -1487,7 +1487,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 1, &.{&annotation1}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 1, &.{&annotation1}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 11), .end_location = LineColumn.init(1, 13), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -1535,7 +1535,7 @@ pub const final = struct {
             // 3 | | print(example_source);
             //   | |_____^ something
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation2, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{null}, &.{ .{ .annotation = &annotation2, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 11), .end_location = LineColumn.init(1, 8), }}, &.{
                 AnnotationData { .connecting_multiline = .{
                     .style = annotation2.style,
                     .severity = diagnostic.severity,
@@ -1549,7 +1549,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 1, &.{&annotation2}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }, .{ .annotation = &annotation2, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 1, &.{&annotation2}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(1, 13), .end_location = LineColumn.init(2, 4), }, .{ .annotation = &annotation2, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 11), .end_location = LineColumn.init(1, 8), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation2.style,
                     .severity = diagnostic.severity,
@@ -1613,7 +1613,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 2, &.{&annotation1}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 2, &.{&annotation1}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(1, 13), .end_location = LineColumn.init(2, 4), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -1659,7 +1659,7 @@ pub const final = struct {
             // 3 | | print(example_source);
             //   | |_____^
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation2, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{null}, &.{ .{ .annotation = &annotation2, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 11), .end_location = LineColumn.init(1, 8), }}, &.{
                 AnnotationData { .connecting_multiline = .{
                     .style = annotation2.style,
                     .severity = diagnostic.severity,
@@ -1673,7 +1673,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 1, &.{&annotation2}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }, .{ .annotation = &annotation2, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 1, &.{&annotation2}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(1, 13), .end_location = LineColumn.init(2, 4), }, .{ .annotation = &annotation2, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 11), .end_location = LineColumn.init(1, 8), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation2.style,
                     .severity = diagnostic.severity,
@@ -1709,7 +1709,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 2, &.{&annotation1}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 2, &.{&annotation1}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 0, .start_location = LineColumn.init(1, 13), .end_location = LineColumn.init(2, 4), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation1.style,
                     .severity = diagnostic.severity,
@@ -1756,7 +1756,7 @@ pub const final = struct {
             //   |         |                full program
             //   |         something
 
-            try runTest(input, &diagnostic, 0, &.{}, &.{.{ .annotation = &annotation3, .vertical_bar_index = 0, }, .{ .annotation = &annotation2, .vertical_bar_index = 1, }}, &.{
+            try runTest(input, &diagnostic, 0, &.{null, null}, &.{ .{ .annotation = &annotation3, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 0), .end_location = LineColumn.init(2, 21), }, .{ .annotation = &annotation2, .vertical_bar_index = 1, .start_location = LineColumn.init(0, 11), .end_location = LineColumn.init(1, 8), }}, &.{
                 AnnotationData { .connecting_multiline = .{
                     .style = annotation3.style,
                     .severity = diagnostic.severity,
@@ -1792,7 +1792,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 1, &.{&annotation3, &annotation2}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 1, }, .{ .annotation = &annotation2, .vertical_bar_index = 1, }}, &.{
+            try runTest(input, &diagnostic, 1, &.{&annotation3, &annotation2}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 1, .start_location = LineColumn.init(1, 13), .end_location = LineColumn.init(2, 4), }, .{ .annotation = &annotation2, .vertical_bar_index = 1, .start_location = LineColumn.init(0, 11), .end_location = LineColumn.init(1, 8), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation3.style,
                     .severity = diagnostic.severity,
@@ -1876,7 +1876,7 @@ pub const final = struct {
                 }},
                 AnnotationData.newline,
             });
-            try runTest(input, &diagnostic, 2, &.{&annotation3, &annotation1}, &.{.{ .annotation = &annotation1, .vertical_bar_index = 1, }, .{ .annotation = &annotation3, .vertical_bar_index = 0, }}, &.{
+            try runTest(input, &diagnostic, 2, &.{&annotation3, &annotation1}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = 1, .start_location = LineColumn.init(1, 13), .end_location = LineColumn.init(2, 4), }, .{ .annotation = &annotation3, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 0), .end_location = LineColumn.init(2, 21), }}, &.{
                 AnnotationData { .continuing_multiline = .{
                     .style = annotation3.style,
                     .severity = diagnostic.severity,

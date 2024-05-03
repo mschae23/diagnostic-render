@@ -23,14 +23,16 @@ const AnnotationStyle = diag.AnnotationStyle;
 const Severity = diag.Severity;
 const LineColumn = file.LineColumn;
 
-/// Tuple of a pointer to an [annotation] and an optional vertical bar index, to be passed to the internal
-/// calculate function.
+/// An [annotation] with [location] data.
 ///
 /// [annotation]: Annotation
-pub fn ActiveAnnotation(comptime FileId: type) type {
+/// [location]: LineColumn
+pub fn LocatedAnnotation(comptime FileId: type) type {
     return struct {
         annotation: *const Annotation(FileId),
         vertical_bar_index: ?usize,
+        start_location: LineColumn,
+        end_location: LineColumn,
     };
 }
 

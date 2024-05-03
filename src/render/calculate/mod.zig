@@ -23,7 +23,7 @@ const Diagnostic = diag.Diagnostic;
 const Annotation = diag.Annotation;
 
 const calculate_data = @import("./data.zig");
-pub const ActiveAnnotation = calculate_data.ActiveAnnotation;
+pub const LocatedAnnotation = calculate_data.LocatedAnnotation;
 pub const ContinuingMultilineAnnotationData = calculate_data.ContinuingMultilineAnnotationData;
 pub const ConnectingMultilineAnnotationData = calculate_data.ConnectingMultilineAnnotationData;
 pub const StartAnnotationData = calculate_data.StartAnnotationData;
@@ -48,10 +48,10 @@ pub const VerticalOffset = struct {
     label: usize,
 };
 
-pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), files: *file.Files(FileId),
-    file_id: FileId, line_index: usize, tab_length: usize,
+pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId),
+    line_index: usize,
     continuing_annotations: []const ?*const Annotation(FileId),
-    active_annotations: []const ActiveAnnotation(FileId)) anyerror!std.ArrayListUnmanaged(AnnotationData) {
+    active_annotations: []const LocatedAnnotation(FileId)) anyerror!std.ArrayListUnmanaged(AnnotationData) {
     var starts_ends = try std.ArrayListUnmanaged(StartEnd(FileId)).initCapacity(allocator, active_annotations.len);
     defer starts_ends.deinit(allocator);
 
@@ -60,8 +60,8 @@ pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic
 
         while (i < active_annotations.len) : (i += 1) {
             const annotation = active_annotations[i];
-            const start = try files.lineColumn(file_id, annotation.annotation.range.start, .inclusive, tab_length) orelse unreachable;
-            const end = try files.lineColumn(file_id, annotation.annotation.range.end, .exclusive, tab_length) orelse unreachable;
+            const start = annotation.start_location;
+            const end = annotation.end_location;
 
              // Either start or end has to match line_index
              var start_part: ?StartAnnotationData = null;
@@ -138,7 +138,7 @@ pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic
     var vertical_offsets = try calculateVerticalOffsets(FileId, allocator, starts_ends.items);
     defer vertical_offsets.deinit(allocator);
 
-    return try calculateFinalData(FileId, allocator, diagnostic, files, file_id, line_index, tab_length, starts_ends.items, vertical_offsets.items, continuing_annotations);
+    return try calculateFinalData(FileId, allocator, diagnostic, starts_ends.items, vertical_offsets.items, continuing_annotations);
 }
 
 pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Allocator, starts_ends: []const StartEnd(FileId)) std.mem.Allocator.Error!std.ArrayListUnmanaged(VerticalOffset) {
@@ -522,39 +522,14 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
     return vertical_offsets;
 }
 
-pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId), files: *file.Files(FileId),
-    file_id: FileId, line_index: usize, tab_length: usize,
+pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, diagnostic: *const Diagnostic(FileId),
     starts_ends: []const StartEnd(FileId), vertical_offsets: []const VerticalOffset,
     continuing_annotations: []const ?*const Annotation(FileId)) anyerror!std.ArrayListUnmanaged(AnnotationData) {
-    _ = tab_length;
-
     // std.debug.print("[debug] Vertical offsets: {any}\n", .{vertical_offsets});
 
     var final_data = try std.ArrayListUnmanaged(AnnotationData).initCapacity(allocator, 0);
 
     errdefer final_data.deinit(allocator);
-
-    // How many elements from the start of continuing_annotations to take.
-    // Exclusive, the index referred to is not included.
-    var continuing_end_index: usize = 0;
-
-    {
-        var i: usize = 0;
-
-        while (i < continuing_annotations.len) : (i += 1) {
-            const start_line_index = try files.lineIndex(file_id, continuing_annotations[i].annotation.range.start, .inclusive) orelse unreachable;
-
-            // Once we reach a continuing annotation that started on this line,
-            // all the ones after it in the vector should start later too, so we can stop here.
-            // Keep updating i as the last index to use for the continuing vertical bars on the first line
-            // as long as annotations are still from before this line.
-            if (start_line_index < line_index) {
-                continuing_end_index = i + 1;
-            } else if (start_line_index >= line_index) {
-                break;
-            }
-        }
-    }
 
     var current_vertical_offset: usize = 0;
     var continue_next_line: bool = false;
@@ -568,6 +543,9 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
 
     var rest_label: ?RestLabel = null;
 
+    var active_continuing_annotations = try std.bit_set.DynamicBitSetUnmanaged.initFull(allocator, continuing_annotations.len);
+    defer active_continuing_annotations.deinit(allocator);
+
     var additional_continuing_annotations = try std.ArrayListUnmanaged(*const Annotation(FileId)).initCapacity(allocator, 0);
     defer additional_continuing_annotations.deinit(allocator);
 
@@ -575,18 +553,68 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
         continue_next_line = false;
 
         {
+            const connecting_annotation: ?*const StartEnd(FileId) = connect: {
+                var i: usize = 0;
+
+                while (i < starts_ends.len) : (i += 1) {
+                    const vertical_offset = vertical_offsets[i];
+
+                    if (vertical_offset.connection > current_vertical_offset) {
+                        continue_next_line = true;
+                        continue;
+                    }
+
+                    if (vertical_offset.connection == current_vertical_offset) {
+                        const start_end = &starts_ends[i];
+
+                        if (start_end.data == .both) {
+                            continue;
+                        }
+
+                        break :connect start_end;
+                    }
+                }
+
+                break :connect null;
+            };
+
             // Add continuing multiline data for annotations starting on previous lines
-            try final_data.ensureTotalCapacity(allocator, final_data.items.len + continuing_end_index + additional_continuing_annotations.items.len);
+            try final_data.ensureTotalCapacity(allocator, final_data.items.len + continuing_annotations.len + additional_continuing_annotations.items.len);
             var i: usize = 0;
+            var continuing_end_index: usize = 0;
 
-            while (i < continuing_end_index) : (i += 1) {
-                const annotation = continuing_annotations[i];
+            while (i < continuing_annotations.len) : (i += 1) {
+                if (active_continuing_annotations.isSet(i)) {
+                    const a = continuing_annotations[i];
 
-                final_data.addOneAssumeCapacity().* = AnnotationData { .continuing_multiline = ContinuingMultilineAnnotationData {
-                    .style = annotation.style,
-                    .severity = diagnostic.severity,
-                    .vertical_bar_index = i,
-                }};
+                    if (a) |annotation| {
+                        final_data.addOneAssumeCapacity().* = AnnotationData { .continuing_multiline = ContinuingMultilineAnnotationData {
+                            .style = annotation.style,
+                            .severity = diagnostic.severity,
+                            .vertical_bar_index = i,
+                        }};
+                        continuing_end_index = i + 1;
+
+                        if (connecting_annotation) |b| {
+                            if (b.vertical_bar_index.? == i) {
+                                // Add connecting multiline annotation data
+                                const end_location = switch (b.data) {
+                                    .start => unreachable,
+                                    .end => |data| data.location,
+                                    .both => unreachable,
+                                };
+
+                                (try final_data.addOne(allocator)).* = AnnotationData { .connecting_multiline = ConnectingMultilineAnnotationData {
+                                    .style = b.annotation.style,
+                                    .severity = diagnostic.severity,
+                                    .end_location = end_location,
+                                    .vertical_bar_index = b.vertical_bar_index.?,
+                                }};
+                                active_continuing_annotations.unset(b.vertical_bar_index.?);
+                            }
+                }
+                    }
+                }
             }
 
             // Add continuing multiline data for annotations starting on this line
@@ -601,11 +629,9 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                     .vertical_bar_index = continuing_end_index + i,
                 }};
             }
-        }
 
-        {
             // Add additional continuing annotation for annotation connecting on this line
-            var i: usize = 0;
+            i = 0;
 
             while (i < starts_ends.len) : (i += 1) {
                 const vertical_offset = vertical_offsets[i];
@@ -622,52 +648,28 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
                 if (vertical_offset.connection == current_vertical_offset) {
                     const start_end = starts_ends[i];
 
-                    switch (start_end.data) {
-                        .start => {},
-                        .end => continue,
-                        .both => continue,
+                    if (start_end.data != .start) {
+                        continue;
                     }
 
                     (try additional_continuing_annotations.addOne(allocator)).* = start_end.annotation;
-                    break;
-                }
-            }
-        }
 
-        {
-            // Add connecting multiline data
-            var i: usize = 0;
+                    if (connecting_annotation) |b| {
+                        if (b.vertical_bar_index.? == start_end.vertical_bar_index.?) {
+                            // Add connecting multiline annotation data
+                            const end_location = switch (b.data) {
+                                .start => |data| data.location,
+                                .end => unreachable,
+                                .both => unreachable,
+                            };
 
-            while (i < starts_ends.len) : (i += 1) {
-                const vertical_offset = vertical_offsets[i];
-
-                if (vertical_offset.connection < current_vertical_offset and vertical_offset.label < current_vertical_offset) {
-                    continue;
-                }
-
-                if (vertical_offset.connection > current_vertical_offset) {
-                    continue_next_line = true;
-                    continue;
-                }
-
-                if (vertical_offset.connection == current_vertical_offset) {
-                    const start_end = starts_ends[i];
-
-                    const end_location = switch (start_end.data) {
-                        .start => |data| data.location,
-                        .end => |data| data.location,
-                        .both => continue,
-                    };
-
-                    (try final_data.addOne(allocator)).* = AnnotationData { .connecting_multiline = ConnectingMultilineAnnotationData {
-                        .style = start_end.annotation.style,
-                        .severity = diagnostic.severity,
-                        .end_location = end_location,
-                        .vertical_bar_index = (continuing_end_index + additional_continuing_annotations.items.len) - 1,
-                    }};
-
-                    if (start_end.data == .end) {
-                        continuing_end_index -|= 1;
+                            (try final_data.addOne(allocator)).* = AnnotationData { .connecting_multiline = ConnectingMultilineAnnotationData {
+                                .style = b.annotation.style,
+                                .severity = diagnostic.severity,
+                                .end_location = end_location,
+                                .vertical_bar_index = b.vertical_bar_index.?,
+                            }};
+                        }
                     }
 
                     break;

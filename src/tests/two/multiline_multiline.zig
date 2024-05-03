@@ -746,29 +746,12 @@ test "10, unlabelled" {
 }
 
 test "11, labelled" {
-    // TODO Reproducable bug
-    //      Allow connecting to other continuing annotations, keep rendering continuing data on only index 1
-
     try runTest("src/path/to/file.something", fibonacci_input, &.{
         Diagnostic.err().withName("test/two/multiline_multiline/11/labelled").withMessage("Test message").withAnnotations(&.{
             Annotation.primary(0, Span.init(0, 86)).withLabel("annotation 1"),
             Annotation.secondary(0, Span.init(38, 220)).withLabel("annotation 2"),
         })
     },
-    // \\error[test/two/multiline_multiline/11/labelled]: Test message
-    // \\ --> src/path/to/file.something:1:1
-    // \\1 |     pub fn fibonacci(n: i32) -> u64 {
-    // \\  |  ___^
-    // \\2 | |       if n < 0 {
-    // \\  | |  _____-
-    // \\3 | | |         panic!("{} is negative!", n);
-    // \\  | |_|_____________________________________^ annotation 1
-    // \\4 |   |     } else if n == 0 {
-    // \\ ...  |
-    // \\7 |   |         return 1;
-    // \\8 |   |     }
-    // \\  |   |_____- annotation 2
-    // \\
     \\error[test/two/multiline_multiline/11/labelled]: Test message
     \\ --> src/path/to/file.something:1:1
     \\1 |     pub fn fibonacci(n: i32) -> u64 {
@@ -776,12 +759,12 @@ test "11, labelled" {
     \\2 | |       if n < 0 {
     \\  | |  _____-
     \\3 | | |         panic!("{} is negative!", n);
-    \\  | | |_____________________________________^ annotation 1
-    \\4 | |       } else if n == 0 {
-    \\ ...|
-    \\7 | |           return 1;
-    \\8 | |       }
-    \\  | |_______- annotation 2
+    \\  | |_|_____________________________________^ annotation 1
+    \\4 |   |     } else if n == 0 {
+    \\ ...  |
+    \\7 |   |         return 1;
+    \\8 |   |     }
+    \\  |   |_____- annotation 2
     \\9 |
     \\
     );
@@ -794,22 +777,6 @@ test "11, labelled multiline" {
             Annotation.secondary(0, Span.init(38, 220)).withLabel("annotation 2\nfourth line"),
         })
     },
-    // \\error[test/two/multiline_multiline/11/labelled_multiline]: Test message
-    // \\ --> src/path/to/file.something:1:1
-    // \\1 |     pub fn fibonacci(n: i32) -> u64 {
-    // \\  |  ___^
-    // \\2 | |       if n < 0 {
-    // \\  | |  _____-
-    // \\3 | | |         panic!("{} is negative!", n);
-    // \\  | |_|_____________________________________^ annotation 1
-    // \\  |   |                                       second line
-    // \\4 |   |     } else if n == 0 {
-    // \\ ...  |
-    // \\7 |   |         return 1;
-    // \\8 |   |     }
-    // \\  |   |_____- annotation 2
-    // \\  |           fourth line
-    // \\
     \\error[test/two/multiline_multiline/11/labelled_multiline]: Test message
     \\ --> src/path/to/file.something:1:1
     \\1 |     pub fn fibonacci(n: i32) -> u64 {
@@ -817,13 +784,13 @@ test "11, labelled multiline" {
     \\2 | |       if n < 0 {
     \\  | |  _____-
     \\3 | | |         panic!("{} is negative!", n);
-    \\  | | |_____________________________________^ annotation 1
-    \\  | |                                         second line
-    \\4 | |       } else if n == 0 {
-    \\ ...|
-    \\7 | |           return 1;
-    \\8 | |       }
-    \\  | |_______- annotation 2
+    \\  | |_|_____________________________________^ annotation 1
+    \\  |   |                                       second line
+    \\4 |   |     } else if n == 0 {
+    \\ ...  |
+    \\7 |   |         return 1;
+    \\8 |   |     }
+    \\  |   |_____- annotation 2
     \\  |           fourth line
     \\9 |
     \\
@@ -837,20 +804,6 @@ test "11, unlabelled" {
             Annotation.secondary(0, Span.init(38, 220)),
         })
     },
-    // \\error[test/two/multiline_multiline/11/unlabelled]: Test message
-    // \\ --> src/path/to/file.something:1:1
-    // \\1 |     pub fn fibonacci(n: i32) -> u64 {
-    // \\  |  ___^
-    // \\2 | |       if n < 0 {
-    // \\  | |  _____-
-    // \\3 | | |         panic!("{} is negative!", n);
-    // \\  | |_|_____________________________________^
-    // \\4 |   |     } else if n == 0 {
-    // \\ ...  |
-    // \\7 |   |         return 1;
-    // \\8 |   |     }
-    // \\  |   |_____-
-    // \\
     \\error[test/two/multiline_multiline/11/unlabelled]: Test message
     \\ --> src/path/to/file.something:1:1
     \\1 |     pub fn fibonacci(n: i32) -> u64 {
@@ -858,12 +811,12 @@ test "11, unlabelled" {
     \\2 | |       if n < 0 {
     \\  | |  _____-
     \\3 | | |         panic!("{} is negative!", n);
-    \\  | | |_____________________________________^
-    \\4 | |       } else if n == 0 {
-    \\ ...|
-    \\7 | |           return 1;
-    \\8 | |       }
-    \\  | |_______-
+    \\  | |_|_____________________________________^
+    \\4 |   |     } else if n == 0 {
+    \\ ...  |
+    \\7 |   |         return 1;
+    \\8 |   |     }
+    \\  |   |_____-
     \\9 |
     \\
     );
