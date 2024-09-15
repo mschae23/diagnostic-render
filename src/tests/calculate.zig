@@ -326,6 +326,69 @@ pub const vertical_offsets = struct {
                 VerticalOffset { .connection = 1, .label = 2, },
             });
         }
+
+        test "between 1" {
+            const annotation1 = Annotation.primary(0, Span.init(0, 26)).withLabel("primary");
+            const annotation2 = Annotation.secondary(0, Span.init(15, 24)).withLabel("secondary");
+            const annotation3 = Annotation.secondary(0, Span.init(28, 31)).withLabel("secondary");
+
+            // 1 |   let main = 23;    // Vertical offsets for annotations on this line are not tested by this test
+            //   |  _^
+            //   | |
+            // 2 | | something += 3.0;
+            //   | | --------- ^  --- secondary 1
+            //   | |_|_________|
+            //   |   |         primary
+            //   |   secondary 2
+
+            try runTest(&.{
+                StartEnd {
+                    .annotation = &annotation2,
+                    .data = StartEndAnnotationData { .both = .{
+                        .start = StartAnnotationData {
+                            .style = annotation2.style,
+                            .severity = .@"error",
+                            .location = LineColumn.init(1, 0),
+                        },
+                        .end = EndAnnotationData {
+                            .style = annotation2.style,
+                            .severity = .@"error",
+                            .location = LineColumn.init(1, 9),
+                        },
+                    }},
+                    .vertical_bar_index = null,
+                },
+                StartEnd {
+                    .annotation = &annotation1,
+                    .data = StartEndAnnotationData { .end = .{
+                        .style = annotation1.style,
+                        .severity = .@"error",
+                        .location = LineColumn.init(1, 11),
+                    }},
+                    .vertical_bar_index = 0,
+                },
+                StartEnd {
+                    .annotation = &annotation3,
+                    .data = StartEndAnnotationData { .both = .{
+                        .start = StartAnnotationData {
+                            .style = annotation3.style,
+                            .severity = .@"error",
+                            .location = LineColumn.init(1, 13),
+                        },
+                        .end = EndAnnotationData {
+                            .style = annotation3.style,
+                            .severity = .@"error",
+                            .location = LineColumn.init(1, 16),
+                        },
+                    }},
+                    .vertical_bar_index = null,
+                },
+            }, &.{
+                VerticalOffset { .connection = 2, .label = 3, },
+                VerticalOffset { .connection = 1, .label = 2, },
+                VerticalOffset { .connection = 0, .label = 0, },
+            });
+        }
     };
 
     pub const starting = struct {

@@ -110,7 +110,8 @@ pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic
                 std.debug.panic("Annotation neither starts nor ends in this line, despite previous check", .{});
              }
 
-            // Insert sorted by line index (ascending) first, then by column index (ascending).
+            // Insert sorted by column index (ascending). Line indices are ignored, since starts_ends items are
+            // assumed to always be on the same line (the current line index).
             // For the "both" variant, the start column index is used.
             starts_ends.insertAssumeCapacity(std.sort.upperBound(StartEnd(FileId), starts_ends.items, start_end, struct {
                 pub fn inner(context: StartEnd(FileId), lhs: StartEnd(FileId)) std.math.Order {
@@ -125,11 +126,7 @@ pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic
                         .both => |data| data.start.location,
                     };
 
-                    if (a_start.line_index == b_start.line_index) {
-                        return std.math.order(a_start.column_index, b_start.column_index);
-                    } else {
-                        return std.math.order(a_start.line_index, b_start.line_index);
-                    }
+                    return std.math.order(a_start.column_index, b_start.column_index);
                 }
              }.inner), start_end);
         }
@@ -188,11 +185,13 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
 
             switch (start_end.data) {
                 .start => continue,
-                .end => try ending_annotation_indices.insert(allocator, std.sort.upperBound(EndingData, ending_annotation_indices.items, start_end.annotation.range.start, struct {
-                    pub fn inner(context: usize, lhs: EndingData) std.math.Order {
-                        return std.math.order(lhs.start_byte_index, context);
-                    }
-                }.inner), EndingData { .start_byte_index = start_end.annotation.range.start, .annotation_index = i, }),
+                .end => {
+                    try ending_annotation_indices.insert(allocator, std.sort.upperBound(EndingData, ending_annotation_indices.items, start_end.annotation.range.start, struct {
+                        pub fn inner(context: usize, lhs: EndingData) std.math.Order {
+                            return std.math.order(lhs.start_byte_index, context);
+                        }
+                    }.inner), EndingData { .start_byte_index = start_end.annotation.range.start, .annotation_index = i, });
+                },
                 .both => continue,
             }
         }
@@ -210,12 +209,10 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
             const annotation = start_end.annotation;
             _ = annotation;
 
-            if (next_connection_offset == 0) {
-                if (j > 0) {
-                    // Special case: if there are any other annotations before this ending
-                    // annotation, use vertical offset 1 at minimum.
-                    next_connection_offset = 1;
-                }
+            if (next_connection_offset == 0 and j > 0) {
+                // Special case: if there are any other annotations before this ending
+                // annotation, use vertical offset 1 at minimum.
+                next_connection_offset = 1;
             }
 
             vertical_offsets.items[j].connection = next_connection_offset;
@@ -388,7 +385,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
     //    | |        label 3
 
     {
-        var ending_label_offset: usize = 0;
+        var minimum_label_offset: usize = 0;
 
         var i: usize = starts_ends.len;
 
@@ -402,28 +399,30 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                 .start => |data| {
                     _ = data;
 
-                    ending_label_offset += 1;
+                    minimum_label_offset += 1;
 
-                    if (ending_label_offset == 1) {
-                        ending_label_offset = 2;
+                    if (minimum_label_offset == 1) {
+                        minimum_label_offset = 3;
                     }
                 },
                 .end => |data| {
                     _ = data;
 
                     if (start_end.annotation.label.len != 0) {
-                        if (ending_label_offset != 0 and vertical_offsets.items[i].label == 0) {
-                            vertical_offsets.items[i].label = ending_label_offset + 1;
+                        // There need to be more tests affected by this, since
+                        // changing how this works often doesn't seem to break much.
+                        if (minimum_label_offset != 0 and vertical_offsets.items[i].label == 0) {
+                            vertical_offsets.items[i].label = minimum_label_offset;
                         } else {
-                            vertical_offsets.items[i].label += ending_label_offset;
+                            vertical_offsets.items[i].label = @max(vertical_offsets.items[i].label, minimum_label_offset);
                         }
+
+                        minimum_label_offset = vertical_offsets.items[i].label + 1 + std.mem.count(u8, std.mem.trim(u8, start_end.annotation.label, &.{'\n'}), "\n");
+                        // Singleline annotations don't take minimum_label_offset into account, so just set next_label_offset to the current minimum
+                        next_label_offset = minimum_label_offset;
                     }
                 },
                 .both => |data| {
-                    if (ending_label_offset == 0) {
-                        ending_label_offset = @max(1, std.mem.count(u8, std.mem.trim(u8, start_end.annotation.label, &.{'\n'}), "\n"));
-                    }
-
                     if (annotation.label.len == 0) {
                         // A single-line annotation without a label doesn't take space.
 
@@ -432,6 +431,7 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                             // can still use a connection line on vertical offset 0, but has to display its
                             // label on at least vertical offset 2.
                             next_label_offset += 2;
+                            minimum_label_offset = @max(minimum_label_offset, 2);
                         }
 
                         continue;
@@ -497,7 +497,9 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                             vertical_offsets.items[i].label = 0;
 
                             next_connection_offset = @max(next_connection_offset, 1);
-                            next_label_offset = @max(next_label_offset, @max(2, 1 + std.mem.count(u8, std.mem.trim(u8, start_end.annotation.label, &.{'\n'}), "\n")));
+                            const lines = 1 + std.mem.count(u8, std.mem.trim(u8, start_end.annotation.label, &.{'\n'}), "\n");
+                            next_label_offset = @max(next_label_offset, @max(2, lines));
+                            minimum_label_offset = @max(minimum_label_offset, @max(2, lines));
                             continue;
                         }
                     }
@@ -511,6 +513,8 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                     if (next_label_offset == 1) {
                         next_label_offset = 2;
                     }
+
+                    minimum_label_offset = @max(minimum_label_offset, next_label_offset);
                 },
             }
         }

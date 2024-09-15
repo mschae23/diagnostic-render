@@ -51,13 +51,13 @@ test "1, labelled" {
 
 test "1, labelled multiline" {
     try runTest("src/path/to/file.something", fibonacci_input, &.{
-        Diagnostic.err().withName("test/three/3_singleline/1/labelled_mutliline").withMessage("Test message").withAnnotations(&.{
+        Diagnostic.err().withName("test/three/3_singleline/1/labelled_multiline").withMessage("Test message").withAnnotations(&.{
             Annotation.primary(0, Span.init(0, 3)).withLabel("annotation 1\nsecond line"),
             Annotation.secondary(0, Span.init(38, 40)).withLabel("annotation 2\nfourth line"),
             Annotation.secondary(0, Span.init(57, 63)).withLabel("annotation 3\nsixth line"),
         })
     },
-    \\error[test/three/3_singleline/1/labelled_mutliline]: Test message
+    \\error[test/three/3_singleline/1/labelled_multiline]: Test message
     \\ --> src/path/to/file.something:1:1
     \\1 | pub fn fibonacci(n: i32) -> u64 {
     \\  | ^^^ annotation 1
