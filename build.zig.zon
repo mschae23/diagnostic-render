@@ -3,8 +3,8 @@
     .version = "1.0.0",
     .dependencies = .{
         .zg = .{
-            .url = "https://codeberg.org/dude_the_builder/zg/archive/16735685fcc3410de361ba3411788ad1fb4fe188.tar.gz",
-            .hash = "1220fe9ac5cdb41833d327a78745614e67d472469f8666567bd8cf9f5847a52b1c51",
+            .url = "https://codeberg.org/dude_the_builder/zg/archive/7ddce488e074c3f052949ba513a340446cea86e9.tar.gz",
+            .hash = "12205e2e7108385a1ec280b6365166e902a690d6a0e8fcc015fdea62d63cf79be8ec",
         },
     },
     .paths = .{

@@ -121,9 +121,9 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                         .end_location = end_location,
                     };
 
-                    try entry.value_ptr.insert(allocator, std.sort.upperBound(LocatedAnnotation(FileId), located_annotation, entry.value_ptr.items, {}, struct {
-                        pub fn inner(_: void, a: LocatedAnnotation(FileId), b: LocatedAnnotation(FileId)) bool {
-                            return a.annotation.range.start < b.annotation.range.start;
+                    try entry.value_ptr.insert(allocator, std.sort.upperBound(LocatedAnnotation(FileId), entry.value_ptr.items, located_annotation, struct {
+                        pub fn inner(context: LocatedAnnotation(FileId), lhs: LocatedAnnotation(FileId)) std.math.Order {
+                            return std.math.order(lhs.annotation.range.start,  context.annotation.range.start);
                         }
                     }.inner), located_annotation);
 

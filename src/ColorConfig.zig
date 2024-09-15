@@ -199,7 +199,7 @@ pub fn setColor(config: Config, writer: anytype, color: Color) anyerror!void {
 
 fn countEnumCases(comptime T: type) comptime_int {
     return switch (@typeInfo(T)) {
-        .Enum => |info| info.fields.len,
+        .@"enum" => |info| info.fields.len,
         else => @compileError("Type is not an enum: " ++ @typeName(T)),
     };
 }
