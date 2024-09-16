@@ -327,7 +327,7 @@ pub const vertical_offsets = struct {
             });
         }
 
-        test "between 1" {
+        test "ending between 1" {
             const annotation1 = Annotation.primary(0, Span.init(0, 26)).withLabel("primary");
             const annotation2 = Annotation.secondary(0, Span.init(15, 24)).withLabel("secondary");
             const annotation3 = Annotation.secondary(0, Span.init(28, 31)).withLabel("secondary");
@@ -387,6 +387,61 @@ pub const vertical_offsets = struct {
                 VerticalOffset { .connection = 2, .label = 3, },
                 VerticalOffset { .connection = 1, .label = 2, },
                 VerticalOffset { .connection = 0, .label = 0, },
+            });
+        }
+
+        test "2 starting before singleline 1 (unlabelled)" {
+            const annotation1 = Annotation.secondary(0, Span.init(0, 3));
+            const annotation2 = Annotation.primary(0, Span.init(4, 32));
+            const annotation3 = Annotation.secondary(0, Span.init(11, 24));
+
+            // 1 |     let main = 23;
+            //   |     --- ^      -
+            //   |  _______|      |
+            //   | |  ____________|
+            // 2 | | | something += 3.0;    // Vertical offsets for annotations on this line are not tested by this test
+            //   | | |_________-       ^
+            //   | |___________________|
+
+            try runTest(&.{
+                StartEnd {
+                    .annotation = &annotation1,
+                    .data = StartEndAnnotationData { .both = .{
+                        .start = StartAnnotationData {
+                            .style = annotation1.style,
+                            .severity = .@"error",
+                            .location = LineColumn.init(0, 0),
+                        },
+                        .end = EndAnnotationData {
+                            .style = annotation1.style,
+                            .severity = .@"error",
+                            .location = LineColumn.init(0, 3),
+                        },
+                    }},
+                    .vertical_bar_index = null,
+                },
+                StartEnd {
+                    .annotation = &annotation2,
+                    .data = StartEndAnnotationData { .start = .{
+                        .style = annotation2.style,
+                        .severity = .@"error",
+                        .location = LineColumn.init(0, 4),
+                    }},
+                    .vertical_bar_index = 0,
+                },
+                StartEnd {
+                    .annotation = &annotation3,
+                    .data = StartEndAnnotationData { .start = .{
+                        .style = annotation3.style,
+                        .severity = .@"error",
+                        .location = LineColumn.init(0, 11),
+                    }},
+                    .vertical_bar_index = 1,
+                },
+            }, &.{
+                VerticalOffset { .connection = 0, .label = 0, },
+                VerticalOffset { .connection = 1, .label = 0, },
+                VerticalOffset { .connection = 2, .label = 0, },
             });
         }
     };
@@ -2006,6 +2061,93 @@ pub const final = struct {
                     .severity = diagnostic.severity,
                     .location = LineColumn.init(2, 4),
                     .label = "something",
+                }},
+                AnnotationData.newline,
+            });
+        }
+
+        test "2 starting before singleline 1 (unlabelled)" {
+            const input =
+                \\let main = 23;
+                \\something += 3.0;
+                \\print(example_source);
+            ++ "\n";
+
+            const annotation1 = Annotation.secondary(0, Span.init(0, 3));
+            const annotation2 = Annotation.primary(0, Span.init(4, 32));
+            const annotation3 = Annotation.secondary(0, Span.init(11, 24));
+            const diagnostic = Diagnostic.err().withAnnotations(&.{annotation1, annotation2, annotation3});
+
+            // 1 |     let main = 23;
+            //   |     --- ^      -
+            //   |  _______|      |
+            //   | |  ____________|
+            // 2 | | | something += 3.0;    // Data for annotations on this line are not tested by this test
+            //   | | |_________-       ^
+            //   | |___________________|
+
+            try runTest(input, &diagnostic, 0, &.{null, null}, &.{ .{ .annotation = &annotation1, .vertical_bar_index = null, .start_location = LineColumn.init(0, 0), .end_location = LineColumn.init(0, 3), }, .{ .annotation = &annotation2, .vertical_bar_index = 0, .start_location = LineColumn.init(0, 4), .end_location = LineColumn.init(1, 9), }, .{ .annotation = &annotation3, .vertical_bar_index = 1, .start_location = LineColumn.init(0, 11), .end_location = LineColumn.init(1, 17), }}, &.{
+                AnnotationData { .start = .{
+                    .style = .secondary,
+                    .severity = .@"error",
+                    .location = LineColumn.init(0, 0),
+                }},
+                AnnotationData { .connecting_singleline = .{
+                    .style = .secondary,
+                    .as_multiline = false,
+                    .severity = .@"error",
+                    .line_index = 0,
+                    .start_column_index = 0,
+                    .end_column_index = 3,
+                }},
+                AnnotationData { .end = .{
+                    .style = .secondary,
+                    .severity = .@"error",
+                    .location = LineColumn.init(0, 3),
+                }},
+                AnnotationData { .start = .{
+                    .style = .primary,
+                    .severity = .@"error",
+                    .location = LineColumn.init(0, 4),
+                }},
+                AnnotationData { .start = .{
+                    .style = .secondary,
+                    .severity = .@"error",
+                    .location = LineColumn.init(0, 11),
+                }},
+                AnnotationData.newline,
+                AnnotationData { .connecting_multiline = .{
+                    .style = .primary,
+                    .severity = .@"error",
+                    .end_location = LineColumn.init(0, 4),
+                    .vertical_bar_index = 0,
+                }},
+                AnnotationData { .hanging = .{
+                    .style = .primary,
+                    .severity = .@"error",
+                    .location = LineColumn.init(0, 4),
+                }},
+                AnnotationData { .hanging = .{
+                    .style = .secondary,
+                    .severity = .@"error",
+                    .location = LineColumn.init(0, 11),
+                }},
+                AnnotationData.newline,
+                AnnotationData { .continuing_multiline = .{
+                    .style = .primary,
+                    .severity = .@"error",
+                    .vertical_bar_index = 0,
+                }},
+                AnnotationData { .connecting_multiline = .{
+                    .style = .secondary,
+                    .severity = .@"error",
+                    .end_location = LineColumn.init(0, 11),
+                    .vertical_bar_index = 1,
+                }},
+                AnnotationData { .hanging = .{
+                    .style = .secondary,
+                    .severity = .@"error",
+                    .location = LineColumn.init(0, 11),
                 }},
                 AnnotationData.newline,
             });

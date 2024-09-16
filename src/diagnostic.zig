@@ -185,13 +185,13 @@ pub fn Diagnostic(comptime FileId: type) type {
         name: ?[]const u8,
         /// The main message associated with this diagnostic.
         ///
-        /// These should not include line breaks, and in order support the 'short'
+        /// These should not include line breaks, and in order to support the 'short'
         /// diagnostic display style, the message should be specific enough to make
         /// sense on its own, without additional context provided by annotations and notes.
         message: []const u8,
         /// Source annotations that describe the cause of the diagnostic.
         ///
-        /// The order of the annotations inside the vector does not have any meaning.
+        /// The order of the annotations does not have any meaning.
         /// The annotations are always arranged in the order they appear in the source code.
         annotations: []const Annotation(FileId),
         /// Notes that are associated with the primary cause of the diagnostic.

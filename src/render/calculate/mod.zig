@@ -755,6 +755,8 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
 
                 if (vertical_offset.connection < current_vertical_offset and vertical_offset.label <= current_vertical_offset) {
                     continue;
+                } else if (vertical_offset.connection > current_vertical_offset) {
+                    continue_next_line = true;
                 }
 
                 switch (start_end.data) {

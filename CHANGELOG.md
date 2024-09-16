@@ -9,6 +9,10 @@ and this project adheres to [Semantic versioning](https://semver.org/spec/v2.0.0
 - Update to Zig version `0.14.0-dev.1573+4d81e8ee9`.
 - Add more tests.
 
+### Fixes
+- Fix a few bugs that were uncovered by the added tests.
+  - These could pretty much only occur when using many annotations or labels with several lines.
+
 ## [1.0.0] - 2024-05-03
 Initial release.
 
