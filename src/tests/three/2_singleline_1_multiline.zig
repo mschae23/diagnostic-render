@@ -543,7 +543,7 @@ test "6, unlabelled" {
 test "7, labelled" {
     try runTest("src/path/to/file.something", fibonacci_input, &.{
         Diagnostic.err().withName("test/three/2_singleline_1_multiline/7/labelled").withMessage("Test message").withAnnotations(&.{
-            Annotation.primary(0, Span.init(47, 108)).withLabel("annotation 1"),
+            Annotation.primary(0, Span.init(47, 109)).withLabel("annotation 1"),
             Annotation.secondary(0, Span.init(98, 100)).withLabel("annotation 2"),
             Annotation.secondary(0, Span.init(93, 97)).withLabel("annotation 3"),
         })
@@ -555,9 +555,9 @@ test "7, labelled" {
     \\  |  ______________^
     \\3 | |         panic!("{} is negative!", n);
     \\4 | |     } else if n == 0 {
-    \\  | |       ---- --       ^
-    \\  | |_______|____|________|
-    \\  |         |    |        annotation 1
+    \\  | |       ---- --        ^
+    \\  | |_______|____|_________|
+    \\  |         |    |         annotation 1
     \\  |         |    annotation 2
     \\  |         annotation 3
     \\5 |           panic!("zero is not a right argument to fibonacci()!");
@@ -568,7 +568,7 @@ test "7, labelled" {
 test "7, labelled multiline 1" {
     try runTest("src/path/to/file.something", fibonacci_input, &.{
         Diagnostic.err().withName("test/three/2_singleline_1_multiline/7/labelled_multiline/1").withMessage("Test message").withAnnotations(&.{
-            Annotation.primary(0, Span.init(47, 108)).withLabel("annotation 1\nsecond line"),
+            Annotation.primary(0, Span.init(47, 109)).withLabel("annotation 1\nsecond line"),
             Annotation.secondary(0, Span.init(98, 100)).withLabel("annotation 2\nfourth line"),
             Annotation.secondary(0, Span.init(93, 97)).withLabel("annotation 3\nsixth line"),
         })
@@ -580,10 +580,10 @@ test "7, labelled multiline 1" {
     \\  |  ______________^
     \\3 | |         panic!("{} is negative!", n);
     \\4 | |     } else if n == 0 {
-    \\  | |       ---- --       ^
-    \\  | |_______|____|________|
-    \\  |         |    |        annotation 1
-    \\  |         |    |        second line
+    \\  | |       ---- --        ^
+    \\  | |_______|____|_________|
+    \\  |         |    |         annotation 1
+    \\  |         |    |         second line
     \\  |         |    annotation 2
     \\  |         |    fourth line
     \\  |         annotation 3
@@ -596,7 +596,7 @@ test "7, labelled multiline 1" {
 test "7, labelled multiline 2" {
     try runTest("src/path/to/file.something", fibonacci_input, &.{
         Diagnostic.err().withName("test/three/2_singleline_1_multiline/7/labelled_multiline/2").withMessage("Test message").withAnnotations(&.{
-            Annotation.primary(0, Span.init(47, 108)).withLabel("annotation 1\nsecond line\nthird line"),
+            Annotation.primary(0, Span.init(47, 109)).withLabel("annotation 1\nsecond line\nthird line"),
             Annotation.secondary(0, Span.init(98, 100)).withLabel("annotation 2\nfifth line\nsixth line"),
             Annotation.secondary(0, Span.init(93, 97)).withLabel("annotation 3\neighth line\nninth line"),
         })
@@ -608,11 +608,11 @@ test "7, labelled multiline 2" {
     \\  |  ______________^
     \\3 | |         panic!("{} is negative!", n);
     \\4 | |     } else if n == 0 {
-    \\  | |       ---- --       ^
-    \\  | |_______|____|________|
-    \\  |         |    |        annotation 1
-    \\  |         |    |        second line
-    \\  |         |    |        third line
+    \\  | |       ---- --        ^
+    \\  | |_______|____|_________|
+    \\  |         |    |         annotation 1
+    \\  |         |    |         second line
+    \\  |         |    |         third line
     \\  |         |    annotation 2
     \\  |         |    fifth line
     \\  |         |    sixth line
@@ -627,7 +627,7 @@ test "7, labelled multiline 2" {
 test "7, unlabelled" {
     try runTest("src/path/to/file.something", fibonacci_input, &.{
         Diagnostic.err().withName("test/three/2_singleline_1_multiline/7/unlabelled").withMessage("Test message").withAnnotations(&.{
-            Annotation.primary(0, Span.init(47, 108)),
+            Annotation.primary(0, Span.init(47, 109)),
             Annotation.secondary(0, Span.init(98, 100)),
             Annotation.secondary(0, Span.init(93, 97)),
         })
@@ -639,11 +639,418 @@ test "7, unlabelled" {
     \\  |  ______________^
     \\3 | |         panic!("{} is negative!", n);
     \\4 | |     } else if n == 0 {
-    \\  | |       ---- --       ^
-    \\  | |_____________________|
+    \\  | |       ---- --        ^
+    \\  | |______________________|
     \\5 |           panic!("zero is not a right argument to fibonacci()!");
     \\
     );
 }
 
-// TODO more tests
+test "8, labelled" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/8/labelled").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(108, 179)).withLabel("annotation 1"),
+            Annotation.secondary(0, Span.init(98, 100)).withLabel("annotation 2"),
+            Annotation.secondary(0, Span.init(93, 97)).withLabel("annotation 3"),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/8/labelled]: Test message
+    \\ --> src/path/to/file.something:4:22
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |         ---- --        ^
+    \\  |  _______|____|_________|
+    \\  | |       |    |
+    \\  | |       |    annotation 2
+    \\  | |       annotation 3
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^ annotation 1
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "8, labelled multiline 1" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/8/labelled_multiline/1").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(108, 179)).withLabel("annotation 1\nsixth line"),
+            Annotation.secondary(0, Span.init(98, 100)).withLabel("annotation 2\nsecond line"),
+            Annotation.secondary(0, Span.init(93, 97)).withLabel("annotation 3\nfourth line"),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/8/labelled_multiline/1]: Test message
+    \\ --> src/path/to/file.something:4:22
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |         ---- --        ^
+    \\  |  _______|____|_________|
+    \\  | |       |    |
+    \\  | |       |    annotation 2
+    \\  | |       |    second line
+    \\  | |       annotation 3
+    \\  | |       fourth line
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^ annotation 1
+    \\  |         sixth line
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "8, labelled multiline 2" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/8/labelled_multiline/2").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(108, 179)).withLabel("annotation 1\neighth line\nninth line"),
+            Annotation.secondary(0, Span.init(98, 100)).withLabel("annotation 2\nsecond line\nthird line"),
+            Annotation.secondary(0, Span.init(93, 97)).withLabel("annotation 3\nfifth line\nsixth line"),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/8/labelled_multiline/2]: Test message
+    \\ --> src/path/to/file.something:4:22
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |         ---- --        ^
+    \\  |  _______|____|_________|
+    \\  | |       |    |
+    \\  | |       |    annotation 2
+    \\  | |       |    second line
+    \\  | |       |    third line
+    \\  | |       annotation 3
+    \\  | |       fifth line
+    \\  | |       sixth line
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^ annotation 1
+    \\  |         eighth line
+    \\  |         ninth line
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "8, unlabelled" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/8/unlabelled").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(108, 179)),
+            Annotation.secondary(0, Span.init(98, 100)),
+            Annotation.secondary(0, Span.init(93, 97)),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/8/unlabelled]: Test message
+    \\ --> src/path/to/file.something:4:22
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |         ---- --        ^
+    \\  |  ______________________|
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "9, labelled" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/9/labelled").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(98, 179)).withLabel("annotation 1"),
+            Annotation.secondary(0, Span.init(108, 109)).withLabel("annotation 2"),
+            Annotation.secondary(0, Span.init(93, 97)).withLabel("annotation 3"),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/9/labelled]: Test message
+    \\ --> src/path/to/file.something:4:12
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |         ---- ^         - annotation 2
+    \\  |  _______|____|
+    \\  | |       |
+    \\  | |       annotation 3
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^ annotation 1
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "9, labelled multiline 1" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/9/labelled_multiline/1").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(98, 179)).withLabel("annotation 1\nsixth line"),
+            Annotation.secondary(0, Span.init(108, 109)).withLabel("annotation 2\nsecond line"),
+            Annotation.secondary(0, Span.init(93, 97)).withLabel("annotation 3\nfourth line"),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/9/labelled_multiline/1]: Test message
+    \\ --> src/path/to/file.something:4:12
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |         ---- ^         - annotation 2
+    \\  |  _______|____|           second line
+    \\  | |       |
+    \\  | |       annotation 3
+    \\  | |       fourth line
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^ annotation 1
+    \\  |         sixth line
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "9, labelled multiline 2" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/9/labelled_multiline/2").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(98, 179)).withLabel("annotation 1\neighth line\nninth line"),
+            Annotation.secondary(0, Span.init(108, 109)).withLabel("annotation 2\nsecond line\nthird line"),
+            Annotation.secondary(0, Span.init(93, 97)).withLabel("annotation 3\nfifth line\nsixth line"),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/9/labelled_multiline/2]: Test message
+    \\ --> src/path/to/file.something:4:12
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |         ---- ^         - annotation 2
+    \\  |  _______|____|           second line
+    \\  | |       |                third line
+    \\  | |       annotation 3
+    \\  | |       fifth line
+    \\  | |       sixth line
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^ annotation 1
+    \\  |         eighth line
+    \\  |         ninth line
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "9, unlabelled" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/9/unlabelled").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(98, 179)),
+            Annotation.secondary(0, Span.init(108, 109)),
+            Annotation.secondary(0, Span.init(93, 97)),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/9/unlabelled]: Test message
+    \\ --> src/path/to/file.something:4:12
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |         ---- ^         -
+    \\  |  ____________|
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "10, labelled" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/10/labelled").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(93, 179)).withLabel("annotation 1"),
+            Annotation.secondary(0, Span.init(108, 109)).withLabel("annotation 2"),
+            Annotation.secondary(0, Span.init(98, 100)).withLabel("annotation 3"),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/10/labelled]: Test message
+    \\ --> src/path/to/file.something:4:7
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |  _______^    --        - annotation 2
+    \\  | |            |
+    \\  | |            annotation 3
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^ annotation 1
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "10, labelled multiline 1" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/10/labelled_multiline/1").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(93, 179)).withLabel("annotation 1\nsixth line"),
+            Annotation.secondary(0, Span.init(108, 109)).withLabel("annotation 2\nsecond line"),
+            Annotation.secondary(0, Span.init(98, 100)).withLabel("annotation 3\nfourth line"),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/10/labelled_multiline/1]: Test message
+    \\ --> src/path/to/file.something:4:7
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |  _______^    --        - annotation 2
+    \\  | |            |           second line
+    \\  | |            annotation 3
+    \\  | |            fourth line
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^ annotation 1
+    \\  |         sixth line
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "10, labelled multiline 2" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/10/labelled_multiline/2").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(93, 179)).withLabel("annotation 1\neighth line\nninth line"),
+            Annotation.secondary(0, Span.init(108, 109)).withLabel("annotation 2\nsecond line\nthird line"),
+            Annotation.secondary(0, Span.init(98, 100)).withLabel("annotation 3\nfifth line\nsixth line"),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/10/labelled_multiline/2]: Test message
+    \\ --> src/path/to/file.something:4:7
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |  _______^    --        - annotation 2
+    \\  | |            |           second line
+    \\  | |            |           third line
+    \\  | |            annotation 3
+    \\  | |            fifth line
+    \\  | |            sixth line
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^ annotation 1
+    \\  |         eighth line
+    \\  |         ninth line
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "10, unlabelled" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/10/unlabelled").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(93, 179)),
+            Annotation.secondary(0, Span.init(108, 109)),
+            Annotation.secondary(0, Span.init(98, 100)),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/10/unlabelled]: Test message
+    \\ --> src/path/to/file.something:4:7
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |  _______^    --        -
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "11, labelled" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/11/labelled").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(103, 179)).withLabel("annotation 1"),
+            Annotation.secondary(0, Span.init(93, 97)).withLabel("annotation 2"),
+            Annotation.secondary(0, Span.init(98, 107)).withLabel("annotation 3"),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/11/labelled]: Test message
+    \\ --> src/path/to/file.something:4:17
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |         ---- -----^---
+    \\  |  _______|____|____|
+    \\  | |       |    |
+    \\  | |       |    annotation 3
+    \\  | |       annotation 2
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^ annotation 1
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "11, labelled multiline 1" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/11/labelled_multiline/1").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(103, 179)).withLabel("annotation 1\nsixth line"),
+            Annotation.secondary(0, Span.init(93, 97)).withLabel("annotation 2\nfourth line"),
+            Annotation.secondary(0, Span.init(98, 107)).withLabel("annotation 3\nsecond line"),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/11/labelled_multiline/1]: Test message
+    \\ --> src/path/to/file.something:4:17
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |         ---- -----^---
+    \\  |  _______|____|____|
+    \\  | |       |    |
+    \\  | |       |    annotation 3
+    \\  | |       |    second line
+    \\  | |       annotation 2
+    \\  | |       fourth line
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^ annotation 1
+    \\  |         sixth line
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "11, labelled multiline 2" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/11/labelled_multiline/2").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(103, 179)).withLabel("annotation 1\neighth line\nninth line"),
+            Annotation.secondary(0, Span.init(93, 97)).withLabel("annotation 2\nfifth line\nsixth line"),
+            Annotation.secondary(0, Span.init(98, 107)).withLabel("annotation 3\nsecond line\nthird line"),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/11/labelled_multiline/2]: Test message
+    \\ --> src/path/to/file.something:4:17
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |         ---- -----^---
+    \\  |  _______|____|____|
+    \\  | |       |    |
+    \\  | |       |    annotation 3
+    \\  | |       |    second line
+    \\  | |       |    third line
+    \\  | |       annotation 2
+    \\  | |       fifth line
+    \\  | |       sixth line
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^ annotation 1
+    \\  |         eighth line
+    \\  |         ninth line
+    \\7 |           return 1;
+    \\
+    );
+}
+
+test "11, unlabelled" {
+    try runTest("src/path/to/file.something", fibonacci_input, &.{
+        Diagnostic.err().withName("test/three/2_singleline_1_multiline/11/unlabelled").withMessage("Test message").withAnnotations(&.{
+            Annotation.primary(0, Span.init(103, 179)),
+            Annotation.secondary(0, Span.init(93, 97)),
+            Annotation.secondary(0, Span.init(98, 107)),
+        })
+    },
+    \\error[test/three/2_singleline_1_multiline/11/unlabelled]: Test message
+    \\ --> src/path/to/file.something:4:17
+    \\3 |           panic!("{} is negative!", n);
+    \\4 |       } else if n == 0 {
+    \\  |         ---- -----^---
+    \\  |  _________________|
+    \\5 | |         panic!("zero is not a right argument to fibonacci()!");
+    \\6 | |     } else if n == 1 {
+    \\  | |_____^
+    \\7 |           return 1;
+    \\
+    );
+}
