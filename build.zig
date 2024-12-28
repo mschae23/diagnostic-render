@@ -31,4 +31,21 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_main_tests.step);
+
+    const dev_example_exe = b.addExecutable(.{
+        .name = "diagnosticrender-dev",
+        .root_source_file = b.path(b.fmt("examples/dev/main.zig", .{})),
+        .target = target,
+        .optimize = optimize,
+    });
+    dev_example_exe.root_module.addImport("diagnostic-render", lib);
+
+    const dev_example_run_cmd = b.addRunArtifact(dev_example_exe);
+    if (b.args) |args| dev_example_run_cmd.addArgs(args);
+
+    const dev_example_install_artifact = b.addInstallArtifact(dev_example_exe, .{});
+    dev_example_run_cmd.step.dependOn(&dev_example_install_artifact.step);
+
+    const run_dev_step = b.step("dev", "Run dev example");
+    run_dev_step.dependOn(&dev_example_run_cmd.step);
 }

@@ -114,7 +114,7 @@ pub fn calculate(comptime FileId: type, allocator: std.mem.Allocator, diagnostic
             // assumed to always be on the same line (the current line index).
             // For the "both" variant, the start column index is used.
             starts_ends.insertAssumeCapacity(std.sort.upperBound(StartEnd(FileId), starts_ends.items, start_end, struct {
-                pub fn inner(context: StartEnd(FileId), lhs: StartEnd(FileId)) std.math.Order {
+                pub fn inner(lhs: StartEnd(FileId), context: StartEnd(FileId)) std.math.Order {
                     const a_start = switch (lhs.data) {
                         .start => |data| data.location,
                         .end => |data| data.location,
@@ -187,8 +187,8 @@ pub fn calculateVerticalOffsets(comptime FileId: type, allocator: std.mem.Alloca
                 .start => continue,
                 .end => {
                     try ending_annotation_indices.insert(allocator, std.sort.upperBound(EndingData, ending_annotation_indices.items, start_end.annotation.range.start, struct {
-                        pub fn inner(context: usize, lhs: EndingData) std.math.Order {
-                            return std.math.order(lhs.start_byte_index, context);
+                        pub fn inner(lhs: usize, context: EndingData) std.math.Order {
+                            return std.math.order(lhs, context.start_byte_index);
                         }
                     }.inner), EndingData { .start_byte_index = start_end.annotation.range.start, .annotation_index = i, });
                 },
@@ -684,14 +684,14 @@ pub fn calculateFinalData(comptime FileId: type, allocator: std.mem.Allocator, d
             var i: usize = 0;
 
             const AnnotationDataCompare = struct {
-                pub fn inner(context: LineColumn, lhs: AnnotationData) std.math.Order {
-                    const a_start = switch (lhs) {
+                pub fn inner(lhs: LineColumn, context: AnnotationData) std.math.Order {
+                    const a_start = lhs;
+                    const b_start = switch (context) {
                         .start => |data| data.location,
                         .end => |data| data.location,
                         .connecting_singleline => |data| LineColumn.init(data.line_index, data.start_column_index),
                         else => unreachable,
                     };
-                    const b_start = context;
 
                     if (a_start.line_index == b_start.line_index) {
                         return std.math.order(a_start.column_index, b_start.column_index);

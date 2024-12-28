@@ -122,7 +122,7 @@ pub fn DiagnosticRenderer(comptime FileId: type) type {
                     };
 
                     try entry.value_ptr.insert(allocator, std.sort.upperBound(LocatedAnnotation(FileId), entry.value_ptr.items, located_annotation, struct {
-                        pub fn inner(context: LocatedAnnotation(FileId), lhs: LocatedAnnotation(FileId)) std.math.Order {
+                        pub fn inner(lhs: LocatedAnnotation(FileId), context: LocatedAnnotation(FileId)) std.math.Order {
                             return std.math.order(lhs.annotation.range.start,  context.annotation.range.start);
                         }
                     }.inner), located_annotation);
