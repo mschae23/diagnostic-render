@@ -41,7 +41,7 @@ test "Development" {
     });
     defer file_hashmap.deinit();
 
-    var files = try file.Files(usize).init(std.testing.allocator, &file_hashmap);
+    var files = try file.Files(usize, *std.AutoHashMap(usize, file.FileData)).init(std.testing.allocator, &file_hashmap);
     defer files.deinit();
 
     const diagnostics = .{
@@ -58,7 +58,7 @@ test "Development" {
     const output_file = std.io.getStdErr();
     try output_file.writer().writeByte('\n');
 
-    var renderer = render.DiagnosticRenderer(usize).init(std.testing.allocator, output_file.writer().any(), std.io.tty.detectConfig(output_file), &files, .{});
+    var renderer = render.DiagnosticRenderer(usize, *std.AutoHashMap(usize, file.FileData)).init(std.testing.allocator, output_file.writer().any(), std.io.tty.detectConfig(output_file), &files, .{});
     try renderer.render(&diagnostics);
 }
 
@@ -74,13 +74,13 @@ pub const output = struct {
         });
         defer file_hashmap.deinit();
 
-        var files = try file.Files(usize).init(std.testing.allocator, &file_hashmap);
+        var files = try file.Files(usize, *std.AutoHashMap(usize, file.FileData)).init(std.testing.allocator, &file_hashmap);
         defer files.deinit();
 
         var actual = try std.ArrayListUnmanaged(u8).initCapacity(std.testing.allocator, 0);
         defer actual.deinit(std.testing.allocator);
 
-        var renderer = render.DiagnosticRenderer(usize).init(std.testing.allocator, actual.writer(std.testing.allocator).any(), .no_color, &files, .{});
+        var renderer = render.DiagnosticRenderer(usize, *std.AutoHashMap(usize, file.FileData)).init(std.testing.allocator, actual.writer(std.testing.allocator).any(), .no_color, &files, .{});
         try renderer.render(diagnostics);
 
         try std.testing.expectEqualStrings(expected, actual.items);

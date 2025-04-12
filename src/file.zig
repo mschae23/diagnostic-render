@@ -69,9 +69,17 @@ pub const Location = struct {
     column_number: usize,
 };
 
-pub fn Files(comptime FileId: type) type {
+/// The main data structure holding data for the files that diagnostics can be reported on.
+///
+/// ## Type parameters
+/// * `FileDataMap`:
+///   This type needs to have a `get(FileId)?*FileData` function.
+///
+///   Because it is stored inside the `Files` struct, it makes sense to use a pointer type here
+///   if you need the actual data to be stored somewhere else.
+pub fn Files(comptime FileId: type, comptime FileDataMap: type) type {
     return struct {
-        files: *std.AutoHashMap(FileId, FileData),
+        files: FileDataMap,
 
         allocator: std.mem.Allocator,
         line_starts: std.AutoHashMap(FileId, std.ArrayListUnmanaged(usize)),
@@ -81,7 +89,7 @@ pub fn Files(comptime FileId: type) type {
         const Self = @This();
 
         /// Caller retains overship over HashMap memory.
-        pub fn init(allocator: std.mem.Allocator, files: *std.AutoHashMap(FileId, FileData)) !Self {
+        pub fn init(allocator: std.mem.Allocator, files: FileDataMap) !Self {
             return Self {
                 .files = files,
 

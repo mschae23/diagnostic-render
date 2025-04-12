@@ -40,17 +40,23 @@ pub const RenderConfig = struct {
 };
 
 /// A renderer for diagnostics using an "ASCII art"-like format.
-pub fn DiagnosticRenderer(comptime FileId: type) type {
+///
+/// ## Type parameters
+/// * `FileDataMap`:
+///   See [`Files`] documentation.
+///
+/// [`Files`]: file.Files
+pub fn DiagnosticRenderer(comptime FileId: type, comptime FileDataMap: type) type {
     return struct {
         global_allocator: std.mem.Allocator,
-        writer: std.io.AnyWriter, colors: std.io.tty.Config, files: *file.Files(FileId), config: RenderConfig,
+        writer: std.io.AnyWriter, colors: std.io.tty.Config, files: *file.Files(FileId, FileDataMap), config: RenderConfig,
 
         max_nested_blocks: usize, line_digits: u32,
 
         const Self = @This();
 
         /// Creates a new diagnostics renderer.
-        pub fn init(allocator: std.mem.Allocator, writer: std.io.AnyWriter, colors: std.io.tty.Config, files: *file.Files(FileId), config: RenderConfig) Self {
+        pub fn init(allocator: std.mem.Allocator, writer: std.io.AnyWriter, colors: std.io.tty.Config, files: *file.Files(FileId, FileDataMap), config: RenderConfig) Self {
             return Self {
                 .global_allocator = allocator,
                 .writer = writer, .colors = colors, .files = files, .config = config,

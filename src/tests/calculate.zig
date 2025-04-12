@@ -564,7 +564,7 @@ pub const final = struct {
         });
         defer file_hashmap.deinit();
 
-        var files = try file.Files(usize).init(std.testing.allocator, &file_hashmap);
+        var files = try file.Files(usize, *std.AutoHashMap(usize, file.FileData)).init(std.testing.allocator, &file_hashmap);
         defer files.deinit();
 
         var actual = try calculate.calculate(usize, std.testing.allocator, diagnostic, line_index, continuing_annotations, active_annotations);
