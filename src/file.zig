@@ -20,7 +20,7 @@ const grapheme = @import("zg-grapheme");
 const DisplayWidth = @import("zg-displaywidth");
 
 pub const FileData = struct {
-    name: [:0]const u8,
+    name: []const u8,
     reader: std.io.AnyReader,
     // Must be the SeekableStream for the reader
     seeker: io.AnySeekableStream,
@@ -118,7 +118,7 @@ pub fn Files(comptime FileId: type, comptime FileDataMap: type) type {
         /// The return value is only `null` if no file with this ID exists.
         ///
         /// [`FileId`]: FileId
-        pub fn name(self: *const Self, file_id: FileId) ?[:0]const u8 {
+        pub fn name(self: *const Self, file_id: FileId) ?[]const u8 {
             const opt_file_data = self.files.get(file_id);
 
             if (opt_file_data) |file_data| {
