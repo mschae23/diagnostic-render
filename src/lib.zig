@@ -34,7 +34,6 @@
 //! [text renderer]: render.DiagnosticRenderer
 //! [diagnostics]: diagnostic.Diagnostic
 
-pub const io = @import("./io.zig");
 pub const file = @import("./file.zig");
 pub const diagnostic = @import("./diagnostic.zig");
 pub const render = @import("./render/mod.zig");

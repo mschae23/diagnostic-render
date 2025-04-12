@@ -6,6 +6,10 @@
             .url = "https://codeberg.org/atman/zg/archive/v0.13.4.tar.gz",
             .hash = "1220fe42e39fd141c84fd7d5cf69945309bb47253033e68788f99bdfe5585fbc711a",
         },
+        .bufstream = .{
+            .url = "https://mschae23.de/git/mschae23/bufstream/archive/0364a948cc02890edf33adcda681adf17bf6f157.tar.gz",
+            .hash = "122032cc87c8ac3068146f4f0fbfa694673d81fc6152c58a0dd30c31a6399e1d2bcb",
+        },
     },
     .paths = .{
         "build.zig",

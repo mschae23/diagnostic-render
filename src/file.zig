@@ -15,15 +15,15 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
-const io = @import("./io.zig");
 const grapheme = @import("zg-grapheme");
 const DisplayWidth = @import("zg-displaywidth");
+const bufstream = @import("bufstream");
 
 pub const FileData = struct {
     name: []const u8,
     reader: std.io.AnyReader,
-    // Must be the SeekableStream for the reader
-    seeker: io.AnySeekableStream,
+    // Must be the seeker for the reader
+    seeker: bufstream.AnySeeker,
 };
 
 pub const LineRange = struct {
@@ -152,7 +152,7 @@ pub fn Files(comptime FileId: type, comptime FileDataMap: type) type {
         ///
         /// [`FileId`]: FileId
         /// [`reader`]: reader
-        pub fn seeker(self: *const Self, file_id: FileId) ?io.AnySeekableStream {
+        pub fn seeker(self: *const Self, file_id: FileId) ?bufstream.AnySeeker {
             const opt_file_data = self.files.get(file_id);
 
             if (opt_file_data) |file_data| {

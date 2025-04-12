@@ -15,7 +15,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
-const io = @import("../../io.zig");
 const file = @import("../../file.zig");
 const LineColumn = file.LineColumn;
 const diag = @import("../../diagnostic.zig");

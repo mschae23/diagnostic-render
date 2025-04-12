@@ -17,7 +17,6 @@
 const std = @import("std");
 const grapheme = @import("zg-grapheme");
 const DisplayWidth = @import("zg-displaywidth");
-const io = @import("../io.zig");
 const file = @import("../file.zig");
 const LineColumn = file.LineColumn;
 const diag = @import("../diagnostic.zig");

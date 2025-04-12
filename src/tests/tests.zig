@@ -15,7 +15,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
-const io = @import("../io.zig");
+const bufstream = @import("bufstream");
 const file = @import("../file.zig");
 const LineColumn = file.LineColumn;
 const diag = @import("../diagnostic.zig");
@@ -37,7 +37,7 @@ test "Development" {
     try file_hashmap.put(0, file.FileData {
         .name = "src/test.rs",
         .reader = fbs.reader().any(),
-        .seeker = io.anySeekableStream(@TypeOf(fbs), *@TypeOf(fbs), &&fbs),
+        .seeker = bufstream.anySeeker(@TypeOf(fbs), *@TypeOf(fbs), &&fbs),
     });
     defer file_hashmap.deinit();
 
@@ -70,7 +70,7 @@ pub const output = struct {
         try file_hashmap.put(0, file.FileData {
             .name = path,
             .reader = fbs.reader().any(),
-            .seeker = io.anySeekableStream(@TypeOf(fbs), *@TypeOf(fbs), &&fbs),
+            .seeker = bufstream.anySeeker(@TypeOf(fbs), *@TypeOf(fbs), &&fbs),
         });
         defer file_hashmap.deinit();
 

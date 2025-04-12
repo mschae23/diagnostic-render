@@ -11,10 +11,15 @@ pub fn build(b: *std.Build) void {
     });
 
     const zg = b.dependency("zg", .{});
+    const bufstream = b.dependency("bufstream", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     lib.addImport("zg-codepoint", zg.module("code_point"));
     lib.addImport("zg-grapheme", zg.module("grapheme"));
     lib.addImport("zg-displaywidth", zg.module("DisplayWidth"));
+    lib.addImport("bufstream", bufstream.module("bufstream"));
 
     // b.installArtifact(lib);
 
@@ -26,6 +31,7 @@ pub fn build(b: *std.Build) void {
     main_tests.root_module.addImport("zg-codepoint", zg.module("code_point"));
     main_tests.root_module.addImport("zg-grapheme", zg.module("grapheme"));
     main_tests.root_module.addImport("zg-displaywidth", zg.module("DisplayWidth"));
+    main_tests.root_module.addImport("bufstream", bufstream.module("bufstream"));
 
     const run_main_tests = b.addRunArtifact(main_tests);
 
