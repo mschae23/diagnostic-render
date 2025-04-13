@@ -7,8 +7,8 @@
             .hash = "1220fe42e39fd141c84fd7d5cf69945309bb47253033e68788f99bdfe5585fbc711a",
         },
         .bufstream = .{
-            .url = "https://mschae23.de/git/mschae23/bufstream/archive/0364a948cc02890edf33adcda681adf17bf6f157.tar.gz",
-            .hash = "122032cc87c8ac3068146f4f0fbfa694673d81fc6152c58a0dd30c31a6399e1d2bcb",
+            .url = "https://mschae23.de/git/mschae23/bufstream/archive/882b4fbeb45ec75b59a63eccffd70b696330211b.tar.gz",
+            .hash = "1220fd7a3af922e2d7d61e2bbed93a098f122d54cccf54e4b58dc0cf51f48371e25f",
         },
     },
     .paths = .{
