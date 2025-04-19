@@ -107,18 +107,7 @@ pub const DEFAULT: Self = Self {
         Color.bright_blue,
     },
     .source = Color.reset,
-    .note_severity = .{
-        // Help
-        Color.bright_white,
-        // Note
-        Color.bright_white,
-        // Warning
-        Color.bright_white,
-        // Error
-        Color.bright_white,
-        // Bug
-        Color.bright_white,
-    },
+    .note_severity = DEFAULT_SEVERITY,
     .note_message = .{
         // Help
         Color.reset,
@@ -198,8 +187,5 @@ pub fn setColor(config: Config, writer: anytype, color: Color) anyerror!void {
 }
 
 fn countEnumCases(comptime T: type) comptime_int {
-    return switch (@typeInfo(T)) {
-        .@"enum" => |info| info.fields.len,
-        else => @compileError("Type is not an enum: " ++ @typeName(T)),
-    };
+    return @typeInfo(T).@"enum".fields.len;
 }
